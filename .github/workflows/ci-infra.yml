@@ -2,14 +2,8 @@ name: ci-infra
 
 on:
   pull_request:
-    paths:
-      - 'infra/**'
-      - '.github/workflows/ci-infra.yml'
   push:
     branches: [main]
-    paths:
-      - 'infra/**'
-      - '.github/workflows/ci-infra.yml'
 
 permissions:
   id-token: write          # OIDC token for azure/login

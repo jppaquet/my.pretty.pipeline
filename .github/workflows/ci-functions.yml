@@ -2,14 +2,8 @@ name: ci-functions
 
 on:
   pull_request:
-    paths:
-      - 'src/**'
-      - '.github/workflows/ci-functions.yml'
   push:
     branches: [main]
-    paths:
-      - 'src/**'
-      - '.github/workflows/ci-functions.yml'
 
 permissions:
   contents: read
