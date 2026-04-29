@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/tests/">
+    <Project Path="tests/Notify.Shared.Tests/Notify.Shared.Tests.csproj" />
+  </Folder>
+  <Project Path="Notify.Shared/Notify.Shared.csproj" />
+</Solution>

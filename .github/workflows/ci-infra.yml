@@ -1,0 +1,85 @@
+name: ci-infra
+
+on:
+  pull_request:
+    paths:
+      - 'infra/**'
+      - '.github/workflows/ci-infra.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'infra/**'
+      - '.github/workflows/ci-infra.yml'
+
+permissions:
+  id-token: write          # OIDC token for azure/login
+  contents: read
+  pull-requests: write     # post what-if diff as PR comment
+
+jobs:
+  bicep-build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Bicep CLI
+        run: |
+          curl -sSLO https://github.com/Azure/bicep/releases/latest/download/bicep-linux-x64
+          chmod +x bicep-linux-x64
+          sudo mv bicep-linux-x64 /usr/local/bin/bicep
+          bicep --version
+
+      - name: Lint + build all .bicep files
+        run: |
+          set -eo pipefail
+          fail=0
+          while IFS= read -r f; do
+            echo "::group::bicep build $f"
+            bicep build --no-restore "$f" || fail=1
+            echo "::endgroup::"
+          done < <(find infra -name '*.bicep' -type f)
+          exit $fail
+
+  what-if:
+    needs: bicep-build
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Bicep what-if vs dev RG
+        id: whatif
+        run: |
+          set -eo pipefail
+          OUT=$(az deployment group what-if \
+            --resource-group "${{ vars.AZURE_RG_DEV }}" \
+            --template-file infra/main.bicep \
+            --parameters env=dev \
+            --result-format FullResourcePayloads \
+            --no-pretty-print 2>&1 || true)
+          {
+            echo 'WHATIF<<__EOF__'
+            echo "$OUT"
+            echo '__EOF__'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Comment what-if on PR
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: bicep-whatif
+          message: |
+            ### `bicep what-if` — dev RG
+            <details><summary>Click to expand</summary>
+
+            ```
+            ${{ steps.whatif.outputs.WHATIF }}
+            ```
+
+            </details>
