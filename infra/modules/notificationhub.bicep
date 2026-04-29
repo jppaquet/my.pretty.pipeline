@@ -1,0 +1,34 @@
+// Azure Notification Hubs — Free tier (500 devices, 1M pushes/mo).
+// Activated in Phase 2; APNs credential uploaded out-of-band via az CLI / portal
+// because Bicep doesn't accept the .p8 contents directly without additional plumbing.
+
+@description('Azure region.')
+param location string
+
+@description('Lowercase name prefix.')
+param namePrefix string
+
+@description('Environment (dev | prod).')
+param env string
+
+@description('Tags.')
+param tags object
+
+resource namespace 'Microsoft.NotificationHubs/namespaces@2023-09-01' = {
+  name: 'nhns-${namePrefix}-${env}'
+  location: location
+  tags: tags
+  sku: { name: 'Free' }
+  properties: { namespaceType: 'NotificationHub' }
+}
+
+resource hub 'Microsoft.NotificationHubs/namespaces/notificationHubs@2023-09-01' = {
+  parent: namespace
+  name: 'nh-${namePrefix}-${env}'
+  location: location
+  tags: tags
+  properties: {}
+}
+
+output namespaceName string = namespace.name
+output hubName string = hub.name

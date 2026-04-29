@@ -1,0 +1,68 @@
+name: ci-app
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: macos-14
+    strategy:
+      fail-fast: false
+      matrix:
+        destination:
+          - 'platform=iOS Simulator,name=iPhone 15,OS=17.5'
+          - 'platform=iOS Simulator,name=iPad Pro (12.9-inch) (6th generation),OS=17.5'
+
+    defaults:
+      run:
+        working-directory: app
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 15.4
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+
+      - name: Cache Homebrew
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/Homebrew
+            /usr/local/Homebrew
+          key: brew-${{ runner.os }}-xcodegen-swiftlint
+
+      - name: Install xcodegen + swiftlint
+        run: |
+          brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+          brew list swiftlint >/dev/null 2>&1 || brew install swiftlint
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: SwiftLint (strict)
+        run: swiftlint --strict --reporter github-actions-logging
+
+      - name: Run tests on ${{ matrix.destination }}
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project Notify.xcodeproj \
+            -scheme Notify \
+            -destination '${{ matrix.destination }}' \
+            -resultBundlePath TestResults.xcresult \
+            -enableCodeCoverage YES \
+            CODE_SIGNING_ALLOWED=NO \
+            | xcpretty
+
+      - name: Upload xcresult bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-xcresult-${{ strategy.job-index }}
+          path: app/TestResults.xcresult
+          retention-days: 7

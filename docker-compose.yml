@@ -1,0 +1,69 @@
+# Local-dev parity for integration tests. Same image versions used in CI services
+# blocks (.github/workflows/ci-functions.yml).
+#
+# Usage:
+#   docker compose up -d
+#   cd src && dotnet test
+#   docker compose down -v   # tear down + clear emulator state
+
+services:
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    container_name: notify-azurite
+    command: >-
+      azurite
+      --blobHost 0.0.0.0
+      --queueHost 0.0.0.0
+      --tableHost 0.0.0.0
+      --location /data
+      --skipApiVersionCheck
+    ports:
+      - "10000:10000"   # Blob
+      - "10001:10001"   # Queue
+      - "10002:10002"   # Table
+    volumes:
+      - azurite-data:/data
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "10000"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  cosmos:
+    # Heavy (~3 GB RAM) but stable; vNext preview is faster but not yet GA.
+    image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:latest
+    container_name: notify-cosmos
+    environment:
+      AZURE_COSMOS_EMULATOR_PARTITION_COUNT: "3"
+      AZURE_COSMOS_EMULATOR_ENABLE_DATA_PERSISTENCE: "false"
+      AZURE_COSMOS_EMULATOR_IP_ADDRESS_OVERRIDE: "127.0.0.1"
+    ports:
+      - "8081:8081"
+      - "10250-10254:10250-10254"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -kf https://localhost:8081/_explorer/emulator.pem || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 30
+      start_period: 90s
+
+  # Tiny CloudEvents receiver — stands in for an Event Grid topic so integration
+  # tests can assert "the right CloudEvent was published" without hitting Azure.
+  # Phase 1 will replace this dockerfile-less stub with a real one when we add
+  # the actual `Notify.IngestionApi` integration tests.
+  eventgrid-stub:
+    image: mendhak/http-https-echo:31
+    container_name: notify-eventgrid-stub
+    environment:
+      HTTP_PORT: "8080"
+      LOG_WITHOUT_NEWLINE: "true"
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:8080 || exit 1"]
+      interval: 5s
+      timeout: 2s
+      retries: 5
+
+volumes:
+  azurite-data:

@@ -1,0 +1,94 @@
+name: ci-functions
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: src
+
+    services:
+      # Azurite — only consumed by integration tests added in Phase 1+.
+      azurite:
+        image: mcr.microsoft.com/azure-storage/azurite:latest
+        ports:
+          - 10000:10000  # Blob
+          - 10001:10001  # Queue
+          - 10002:10002  # Table
+
+      # Cosmos DB Linux Emulator — heavy (~3 GB RAM); enabled here so Phase 1
+      # integration tests pick it up automatically. Uses a long startup timeout.
+      cosmos:
+        image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:latest
+        env:
+          AZURE_COSMOS_EMULATOR_PARTITION_COUNT: "3"
+          AZURE_COSMOS_EMULATOR_ENABLE_DATA_PERSISTENCE: "false"
+        ports:
+          - 8081:8081
+          - 10250:10250
+          - 10251:10251
+          - 10252:10252
+          - 10253:10253
+          - 10254:10254
+        options: >-
+          --health-cmd "curl -kf https://localhost:8081/_explorer/emulator.pem || exit 1"
+          --health-interval 30s
+          --health-timeout 5s
+          --health-retries 30
+          --health-start-period 90s
+
+    env:
+      DOTNET_NOLOGO: "true"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+      AZURITE_BLOB_ENDPOINT: http://localhost:10000
+      AZURITE_QUEUE_ENDPOINT: http://localhost:10001
+      AZURITE_TABLE_ENDPOINT: http://localhost:10002
+      COSMOS_EMULATOR_ENDPOINT: https://localhost:8081
+      COSMOS_EMULATOR_KEY: C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore Notify.slnx
+
+      - name: Build (warnings as errors)
+        run: dotnet build Notify.slnx --configuration Release --no-restore -warnaserror
+
+      - name: Trust Cosmos emulator certificate
+        # Phase 1+ integration tests only — emulator's self-signed cert.
+        run: |
+          curl -sk --retry 30 --retry-delay 5 --retry-connrefused \
+            "$COSMOS_EMULATOR_ENDPOINT/_explorer/emulator.pem" -o /tmp/cosmos.pem
+          sudo cp /tmp/cosmos.pem /usr/local/share/ca-certificates/cosmos.crt
+          sudo update-ca-certificates
+
+      - name: Unit + integration tests
+        run: |
+          dotnet test Notify.slnx \
+            --configuration Release \
+            --no-build \
+            --logger "trx;LogFileName=test-results.trx" \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-functions
+          path: src/TestResults/
+          retention-days: 7

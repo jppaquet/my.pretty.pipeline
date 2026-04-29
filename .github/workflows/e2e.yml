@@ -1,0 +1,73 @@
+name: e2e
+
+on:
+  workflow_call:
+    inputs:
+      target_hostname:
+        description: 'Hostname (with or without scheme) of the deployed Function App slot to test'
+        type: string
+        required: true
+      slot:
+        description: 'Deployment slot name (staging | production)'
+        type: string
+        required: false
+        default: staging
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: src
+    env:
+      DOTNET_NOLOGO: "true"
+      E2E_TARGET_HOSTNAME: ${{ inputs.target_hostname }}
+      E2E_SLOT: ${{ inputs.slot }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Skip if E2E project does not exist (Phase 0)
+        id: gate
+        run: |
+          if [ -d "tests/Notify.E2E" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo '::notice::Notify.E2E does not exist yet — Phase 0/1 placeholder. Skipping.'
+          fi
+
+      - name: Set up .NET
+        if: steps.gate.outputs.exists == 'true'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Azure login (OIDC) — needed to mint a CI-only API key from Key Vault
+        if: steps.gate.outputs.exists == 'true'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Run E2E tests
+        if: steps.gate.outputs.exists == 'true'
+        run: |
+          dotnet test tests/Notify.E2E/Notify.E2E.csproj \
+            --configuration Release \
+            --logger "trx;LogFileName=e2e.trx" \
+            --filter Category=E2E \
+            --results-directory ./TestResults
+
+      - name: Upload e2e results
+        if: always() && steps.gate.outputs.exists == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results
+          path: src/TestResults/
+          retention-days: 14

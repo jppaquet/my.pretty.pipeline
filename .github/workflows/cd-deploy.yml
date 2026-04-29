@@ -1,0 +1,137 @@
+name: cd-deploy
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - 'README.md'
+      - '.gitignore'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+  actions: write    # to invoke e2e.yml via workflow_call
+
+concurrency:
+  group: cd-deploy-dev
+  cancel-in-progress: false
+
+jobs:
+  deploy-infra:
+    runs-on: ubuntu-24.04
+    outputs:
+      function_app_name: ${{ steps.outputs.outputs.functionAppName }}
+      function_app_hostname: ${{ steps.outputs.outputs.functionAppHostname }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy infra (Bicep)
+        id: deploy
+        uses: azure/arm-deploy@v2
+        with:
+          scope: resourcegroup
+          resourceGroupName: ${{ vars.AZURE_RG_DEV }}
+          template: infra/main.bicep
+          parameters: env=dev
+          failOnStdErr: false
+
+      - name: Capture outputs
+        id: outputs
+        run: |
+          # Will become populated once functions.bicep is filled in (Phase 1+).
+          NAME="${{ steps.deploy.outputs.functionAppName }}"
+          HOST="${{ steps.deploy.outputs.functionAppHostname }}"
+          echo "functionAppName=${NAME:-}" >> "$GITHUB_OUTPUT"
+          echo "functionAppHostname=${HOST:-}" >> "$GITHUB_OUTPUT"
+
+  publish-functions:
+    needs: deploy-infra
+    if: needs.deploy-infra.outputs.function_app_name != ''
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - Notify.IngestionApi
+          - Notify.PushDelivery
+          - Notify.Archive
+          - Notify.InboxApi
+          - Notify.DeviceApi
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Skip if project does not exist yet (Phase 0)
+        id: gate
+        run: |
+          if [ -d "src/${{ matrix.project }}" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Azure login (OIDC)
+        if: steps.gate.outputs.exists == 'true'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Publish ${{ matrix.project }} to staging slot
+        if: steps.gate.outputs.exists == 'true'
+        run: |
+          set -eo pipefail
+          dotnet publish "src/${{ matrix.project }}/${{ matrix.project }}.csproj" \
+            -c Release -o ./publish
+          cd ./publish && zip -rq ../package.zip .
+          cd ..
+          az functionapp deployment source config-zip \
+            -g "${{ vars.AZURE_RG_DEV }}" \
+            -n "${{ needs.deploy-infra.outputs.function_app_name }}" \
+            --slot staging \
+            --src ./package.zip
+
+  e2e:
+    needs: [deploy-infra, publish-functions]
+    if: |
+      always() &&
+      needs.deploy-infra.result == 'success' &&
+      (needs.publish-functions.result == 'success' || needs.publish-functions.result == 'skipped')
+    uses: ./.github/workflows/e2e.yml
+    with:
+      target_hostname: ${{ needs.deploy-infra.outputs.function_app_hostname }}
+      slot: staging
+    secrets: inherit
+
+  swap-slots:
+    needs: [deploy-infra, e2e]
+    if: success() && needs.deploy-infra.outputs.function_app_name != ''
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Swap staging → production
+        run: |
+          az functionapp deployment slot swap \
+            -g "${{ vars.AZURE_RG_DEV }}" \
+            -n "${{ needs.deploy-infra.outputs.function_app_name }}" \
+            --slot staging --target-slot production

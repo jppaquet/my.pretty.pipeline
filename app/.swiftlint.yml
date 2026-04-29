@@ -1,0 +1,27 @@
+included:
+  - Notify
+  - NotifyTests
+  - NotifyUITests
+excluded:
+  - Notify.xcodeproj
+disabled_rules:
+  - todo
+  - trailing_comma
+opt_in_rules:
+  - empty_count
+  - explicit_init
+  - first_where
+  - force_unwrapping
+  - implicit_return
+  - prefer_self_type_over_type_of_self
+  - redundant_nil_coalescing
+  - sorted_first_last
+  - toggle_bool
+  - unused_import
+line_length:
+  warning: 140
+  error: 200
+identifier_name:
+  min_length: 2
+  excluded:
+    - id
