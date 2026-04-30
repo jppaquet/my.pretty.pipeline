@@ -25,6 +25,7 @@ The architectural plan lives at `~/.claude/plans/that-the-begining-of-validated-
 ```sh
 docker compose up -d                        # Azurite + Cosmos emulator + EG stub
 cd src && dotnet test                       # unit + integration
+open app/Notify.xcodeproj                   # iOS app (requires Xcode)
 ```
 
 ## Status
