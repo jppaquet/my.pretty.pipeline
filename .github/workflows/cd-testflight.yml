@@ -28,16 +28,6 @@ jobs:
       - name: Select Xcode 15.4
         run: sudo xcode-select -s /Applications/Xcode_15.4.app
 
-      - name: Install xcodegen
-        run: brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
-
-      - name: Generate Xcode project (with version from tag)
-        run: |
-          # strip leading "v"
-          VER="${MARKETING_VERSION#v}"
-          xcodegen generate
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VER" Notify/Info.plist 2>/dev/null || true
-
       - name: Write App Store Connect API key
         run: |
           mkdir -p ~/.appstoreconnect/private_keys
@@ -46,6 +36,7 @@ jobs:
       - name: Archive
         run: |
           set -o pipefail
+          VER="${MARKETING_VERSION#v}"
           xcodebuild archive \
             -project Notify.xcodeproj \
             -scheme Notify \
@@ -56,6 +47,7 @@ jobs:
             -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8" \
             -authenticationKeyID "$APP_STORE_CONNECT_API_KEY_ID" \
             -authenticationKeyIssuerID "$APP_STORE_CONNECT_API_ISSUER_ID" \
+            MARKETING_VERSION="$VER" \
             | xcpretty
 
       - name: Export IPA

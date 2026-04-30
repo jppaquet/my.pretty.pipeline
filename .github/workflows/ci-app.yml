@@ -15,8 +15,8 @@ jobs:
       fail-fast: false
       matrix:
         destination:
-          - 'platform=iOS Simulator,name=iPhone 15,OS=17.5'
-          - 'platform=iOS Simulator,name=iPad Pro (12.9-inch) (6th generation),OS=17.5'
+          - 'platform=iOS Simulator,name=iPhone 15'
+          - 'platform=iOS Simulator,name=iPad Pro (12.9-inch) (6th generation)'
 
     defaults:
       run:
@@ -28,21 +28,8 @@ jobs:
       - name: Select Xcode 15.4
         run: sudo xcode-select -s /Applications/Xcode_15.4.app
 
-      - name: Cache Homebrew
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/Library/Caches/Homebrew
-            /usr/local/Homebrew
-          key: brew-${{ runner.os }}-xcodegen-swiftlint
-
-      - name: Install xcodegen + swiftlint
-        run: |
-          brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
-          brew list swiftlint >/dev/null 2>&1 || brew install swiftlint
-
-      - name: Generate Xcode project
-        run: xcodegen generate
+      - name: Install swiftlint
+        run: brew list swiftlint >/dev/null 2>&1 || brew install swiftlint
 
       - name: SwiftLint (strict)
         run: swiftlint --strict --reporter github-actions-logging
