@@ -41,9 +41,12 @@ resource fedMain 'Microsoft.ManagedIdentity/userAssignedIdentities/federatedIden
 }
 
 // Allow GitHub Actions in PR context to run `bicep what-if` (read-only against the RG).
+// Azure rejects concurrent FIC writes under the same MI ("ConcurrentFederatedIdentityCredentialsWritesForSingleManagedIdentity"),
+// so serialize via dependsOn on the previous FIC.
 resource fedPullRequest 'Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials@2023-01-31' = {
   parent: mi
   name: 'github-pull-request'
+  dependsOn: [ fedMain ]
   properties: {
     issuer: 'https://token.actions.githubusercontent.com'
     audiences: [ 'api://AzureADTokenExchange' ]
