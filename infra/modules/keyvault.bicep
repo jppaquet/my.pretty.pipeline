@@ -16,8 +16,12 @@ param tags object
 @description('Principal IDs that should receive Key Vault Secrets User access (read-only).')
 param accessReaderPrincipalIds array = []
 
+// KV names are globally unique (DNS); short generic names like `kv-notify-dev`
+// collide with other Azure tenants. Salted with a per-RG hash.
+var vaultName = 'kv-${namePrefix}-${env}-${take(uniqueString(resourceGroup().id), 6)}'
+
 resource vault 'Microsoft.KeyVault/vaults@2023-07-01' = {
-  name: 'kv-${namePrefix}-${env}'
+  name: vaultName
   location: location
   tags: tags
   properties: {

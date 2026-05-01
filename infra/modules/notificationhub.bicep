@@ -14,8 +14,11 @@ param env string
 @description('Tags.')
 param tags object
 
+// NH namespace names are globally unique (DNS). Salted.
+var namespaceName = 'nhns-${namePrefix}-${env}-${take(uniqueString(resourceGroup().id), 6)}'
+
 resource namespace 'Microsoft.NotificationHubs/namespaces@2023-09-01' = {
-  name: 'nhns-${namePrefix}-${env}'
+  name: namespaceName
   location: location
   tags: tags
   sku: { name: 'Free' }
