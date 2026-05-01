@@ -13,8 +13,14 @@ param env string
 @description('Tags.')
 param tags object
 
-@description('Function App name. Used to build webhook URLs for the subscriptions.')
+@description('Function App name. Used to build webhook URLs once the subs are enabled.')
 param functionAppName string
+
+@description('Phase 1+: provision the archive subscription. Requires the `archive` function to exist in the Function App.')
+param enableArchiveSubscription bool = false
+
+@description('Phase 2+: provision the push subscription. Requires the `push` function to exist in the Function App.')
+param enablePushSubscription bool = false
 
 resource topic 'Microsoft.EventGrid/topics@2024-06-01-preview' = {
   name: 'egt-${namePrefix}-${env}'
@@ -26,22 +32,21 @@ resource topic 'Microsoft.EventGrid/topics@2024-06-01-preview' = {
   }
 }
 
-// Phase 1+ activates these by setting `endpointUrl` to a real Function URL.
-// We declare them now so what-if shows the structure but they don't fire until
-// the underlying Functions exist.
-resource subArchive 'Microsoft.EventGrid/topics/eventSubscriptions@2024-06-01-preview' = {
+// Subscriptions reference functions inside the Function App — they can't be
+// declared before those functions exist, or ARM rejects with "InvalidRequest:
+// This endpoint type is not supported as a destination with managed identities."
+// Each subscription is gated on a Phase-* flag flipped to true once the
+// matching function code is published.
+resource subArchive 'Microsoft.EventGrid/topics/eventSubscriptions@2024-06-01-preview' = if (enableArchiveSubscription) {
   parent: topic
   name: 'sub-archive'
   properties: {
-    deliveryWithResourceIdentity: {
-      identity: { type: 'SystemAssigned' }
-      destination: {
-        endpointType: 'AzureFunction'
-        properties: {
-          resourceId: resourceId('Microsoft.Web/sites/functions', functionAppName, 'archive')
-          maxEventsPerBatch: 1
-          preferredBatchSizeInKilobytes: 64
-        }
+    destination: {
+      endpointType: 'AzureFunction'
+      properties: {
+        resourceId: resourceId('Microsoft.Web/sites/functions', functionAppName, 'archive')
+        maxEventsPerBatch: 1
+        preferredBatchSizeInKilobytes: 64
       }
     }
     filter: { includedEventTypes: [ 'notify.created.v1' ] }
@@ -50,19 +55,16 @@ resource subArchive 'Microsoft.EventGrid/topics/eventSubscriptions@2024-06-01-pr
   }
 }
 
-resource subPush 'Microsoft.EventGrid/topics/eventSubscriptions@2024-06-01-preview' = {
+resource subPush 'Microsoft.EventGrid/topics/eventSubscriptions@2024-06-01-preview' = if (enablePushSubscription) {
   parent: topic
   name: 'sub-push'
   properties: {
-    deliveryWithResourceIdentity: {
-      identity: { type: 'SystemAssigned' }
-      destination: {
-        endpointType: 'AzureFunction'
-        properties: {
-          resourceId: resourceId('Microsoft.Web/sites/functions', functionAppName, 'push')
-          maxEventsPerBatch: 1
-          preferredBatchSizeInKilobytes: 64
-        }
+    destination: {
+      endpointType: 'AzureFunction'
+      properties: {
+        resourceId: resourceId('Microsoft.Web/sites/functions', functionAppName, 'push')
+        maxEventsPerBatch: 1
+        preferredBatchSizeInKilobytes: 64
       }
     }
     filter: { includedEventTypes: [ 'notify.created.v1' ] }
