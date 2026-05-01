@@ -67,6 +67,23 @@ resource contributorAssignment 'Microsoft.Authorization/roleAssignments@2022-04-
   }
 }
 
+// User Access Administrator on the same RG. Contributor cannot
+// `Microsoft.Authorization/roleAssignments/write`, so without this the MI
+// can't apply role assignments declared inside main.bicep — e.g. the KV
+// "Key Vault Secrets User" grant the Function App needs at runtime, or the
+// idempotent re-apply of this module's own Contributor assignment.
+@description('Built-in role definition: User Access Administrator.')
+var userAccessAdminRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '18d7d88d-d35e-4fb5-a5c3-7773c20a72d9')
+
+resource userAccessAdminAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(resourceGroup().id, mi.id, 'user-access-admin')
+  properties: {
+    principalId: mi.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: userAccessAdminRoleId
+  }
+}
+
 output managedIdentityClientId string = mi.properties.clientId
 output managedIdentityPrincipalId string = mi.properties.principalId
 output managedIdentityResourceId string = mi.id
