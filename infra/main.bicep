@@ -1,8 +1,11 @@
-// my.pipeline — root deployment. Wires every module.
+// my.pipeline — root deployment. Wires every module that cd-deploy.yml is
+// responsible for. Excludes `github-oidc.bicep`: that module is bootstrap-only
+// (mints the MI, federated credentials, and the RG-scoped role assignments
+// that cd-deploy itself relies on). Re-running it from cd-deploy hits role-
+// assignment idempotency edge cases and breaks the pipeline.
 //
-// Phase 0 ships only the OIDC managed identity (so GitHub Actions can deploy
-// future phases without long-lived secrets). Subsequent phases enable each
-// `module` block by replacing its `// PHASE-N:` guard with a real instantiation.
+// To recreate the MI: deploy `infra/modules/github-oidc.bicep` directly via
+// `az` once per RG (see docs/DEPLOY.md / infra/bootstrap.sh).
 
 targetScope = 'resourceGroup'
 
@@ -13,12 +16,6 @@ param env string = 'dev'
 @description('Azure region. Defaults to the resource group location.')
 param location string = resourceGroup().location
 
-@description('GitHub org/user that owns the repo (used to scope the OIDC federated credential).')
-param githubOwner string = 'jppaquet'
-
-@description('GitHub repository name.')
-param githubRepo string = 'my.pretty.pipeline'
-
 var namePrefix = 'notify'
 var tags = {
   project: 'my.pipeline'
@@ -26,18 +23,11 @@ var tags = {
   managedBy: 'bicep'
 }
 
-// ── PHASE 0 ─────────────────────────────────────────────────────────
-// User-Assigned Managed Identity for GitHub Actions OIDC.
-module githubOidc 'modules/github-oidc.bicep' = {
-  name: 'github-oidc-${env}'
-  params: {
-    location: location
-    namePrefix: namePrefix
-    env: env
-    githubOwner: githubOwner
-    githubRepo: githubRepo
-    tags: tags
-  }
+// Existing managed identity (created by github-oidc.bicep during bootstrap).
+// We need its principalId to grant Key Vault Secrets User. We only *reference*
+// it — never re-create — so cd-deploy never tries to write to it.
+resource mi 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
+  name: 'mi-${namePrefix}-${env}'
 }
 
 // ── PHASE 1 ─────────────────────────────────────────────────────────
@@ -61,7 +51,7 @@ module keyvault 'modules/keyvault.bicep' = {
     env: env
     tags: tags
     accessReaderPrincipalIds: [
-      githubOidc.outputs.managedIdentityPrincipalId
+      mi.properties.principalId
     ]
   }
 }
