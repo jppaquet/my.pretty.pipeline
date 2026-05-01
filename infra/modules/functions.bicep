@@ -24,7 +24,8 @@ var storageName = toLower('st${namePrefix}${env}${uniqueString(resourceGroup().i
 var planName = 'plan-${namePrefix}-${env}'
 var appInsightsName = 'appi-${namePrefix}-${env}'
 var workspaceName = 'log-${namePrefix}-${env}'
-var functionAppName = 'func-${namePrefix}-${env}'
+// Function App names are globally unique (DNS for *.azurewebsites.net). Salted.
+var functionAppName = 'func-${namePrefix}-${env}-${take(uniqueString(resourceGroup().id), 6)}'
 
 resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   name: storageName

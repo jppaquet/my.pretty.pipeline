@@ -21,8 +21,11 @@ param notificationsTtlSeconds int = 60 * 60 * 24 * 90
 @maxValue(1000)
 param sharedThroughput int = 1000
 
+// Cosmos account names are globally unique (DNS). Salted with a per-RG hash.
+var accountName = 'cosmos-${namePrefix}-${env}-${take(uniqueString(resourceGroup().id), 6)}'
+
 resource account 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' = {
-  name: 'cosmos-${namePrefix}-${env}'
+  name: accountName
   location: location
   tags: tags
   kind: 'GlobalDocumentDB'
