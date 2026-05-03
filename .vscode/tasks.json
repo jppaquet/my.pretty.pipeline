@@ -1,0 +1,203 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build-solution",
+      "type": "shell",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "src/Notify.slnx",
+        "-c",
+        "Debug"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "build-solution-release",
+      "type": "shell",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "src/Notify.slnx",
+        "-c",
+        "Release",
+        "-warnaserror"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "build-ingestion-debug",
+      "type": "shell",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "src/Notify.IngestionApi/Notify.IngestionApi.csproj",
+        "-c",
+        "Debug"
+      ],
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared"
+      },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "build-archive-debug",
+      "type": "shell",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "src/Notify.Archive/Notify.Archive.csproj",
+        "-c",
+        "Debug"
+      ],
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared"
+      },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "test-all",
+      "type": "shell",
+      "command": "dotnet",
+      "args": [
+        "test",
+        "src",
+        "--logger",
+        "console;verbosity=detailed"
+      ],
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "test-unit",
+      "type": "shell",
+      "command": "dotnet",
+      "args": [
+        "test",
+        "src",
+        "--filter",
+        "Category!=Integration"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "test-integration",
+      "type": "shell",
+      "command": "dotnet",
+      "args": [
+        "test",
+        "src",
+        "--filter",
+        "Category=Integration"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "docker-up",
+      "type": "shell",
+      "command": "docker",
+      "args": [
+        "compose",
+        "up",
+        "-d"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "docker-down",
+      "type": "shell",
+      "command": "docker",
+      "args": [
+        "compose",
+        "down"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "open-xcode",
+      "type": "shell",
+      "command": "open",
+      "args": [
+        "app/Notify.xcodeproj"
+      ],
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "build-ios-debug",
+      "type": "shell",
+      "command": "xcodebuild",
+      "args": [
+        "-project",
+        "app/Notify.xcodeproj",
+        "-scheme",
+        "Notify",
+        "-configuration",
+        "Debug",
+        "-derivedDataPath",
+        "build/ios"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "build-ios-release",
+      "type": "shell",
+      "command": "xcodebuild",
+      "args": [
+        "-project",
+        "app/Notify.xcodeproj",
+        "-scheme",
+        "Notify",
+        "-configuration",
+        "Release",
+        "-derivedDataPath",
+        "build/ios"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    }
+  ]
+}

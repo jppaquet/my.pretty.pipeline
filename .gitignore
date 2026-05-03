@@ -33,7 +33,11 @@ fastlane/test_output/
 # ── macOS / IDE ──────────────────────────────────────────────────
 .DS_Store
 .idea/
-.vscode/
+.vscode/*
+# Commit shared dev configs
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/.gitkeep
 
 # ── Local dev volumes ────────────────────────────────────────────
 .azurite/

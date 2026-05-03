@@ -1,0 +1,21 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Attach to Notify.IngestionApi",
+      "type": "coreclr",
+      "request": "attach",
+      "processId": "${command:pickProcess}",
+      "justMyCode": true,
+      "preLaunchTask": "build-ingestion-debug"
+    },
+    {
+      "name": "Attach to Notify.Archive",
+      "type": "coreclr",
+      "request": "attach",
+      "processId": "${command:pickProcess}",
+      "justMyCode": true,
+      "preLaunchTask": "build-archive-debug"
+    }
+  ]
+}

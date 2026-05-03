@@ -1,0 +1,21 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"files.exclude": {
+			"src/**/bin": true,
+			"src/**/obj": true,
+			"app/Notify.xcodeproj/xcuserdata": true,
+			"app/Notify.xcodeproj/project.xcworkspace/xcuserdata": true
+		},
+		"search.exclude": {
+			"src/**/bin": true,
+			"src/**/obj": true,
+			"app/Notify.xcodeproj/xcuserdata": true,
+			"app/Notify.xcodeproj/project.xcworkspace/xcuserdata": true
+		}
+	}
+}
