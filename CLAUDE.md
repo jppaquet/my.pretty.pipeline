@@ -30,6 +30,7 @@ docs/                      SCHEMA, DEPLOY, PROJECT-ONBOARDING
 - Tests: xUnit. Integration tests use `[Trait("Category","Integration")]`.
 - JSON: always go through `Notify.Shared.Json.NotifyJson.Options` (camelCase, lowercase enum, omit-null) so client/server/tests round-trip identically.
 - Branches: feature branch → PR → squash-merge. No direct push to `main`. Branch protection is paywalled on private repos (GitHub Pro), so it's solo-discipline.
+- **`ci-app.yml` (iOS) is opt-in.** macos-15 minutes bill at 10×; the workflow only auto-runs when `app/**` or the workflow file itself changes. Force a run on any PR with "Run workflow" in the Actions tab (`workflow_dispatch`).
 
 ## Azure (dev)
 - Subscription: `JPP-SUB` (`e9e3fab7-6c1d-4778-8196-b6ca90a7c438`). Tenant `0e1e585f-75cb-49a4-8a1d-c29068adf4eb`.

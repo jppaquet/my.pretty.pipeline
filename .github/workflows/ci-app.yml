@@ -1,9 +1,14 @@
 name: ci-app
 
 on:
+  # Opt-in: macos-15 runners are 10x billing minutes. Only auto-run when
+  # actual iOS code changes; force a run on any PR via "Run workflow"
+  # in the Actions tab (workflow_dispatch).
   pull_request:
-  push:
-    branches: [main]
+    paths:
+      - 'app/**'
+      - '.github/workflows/ci-app.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
