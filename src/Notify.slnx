@@ -1,6 +1,8 @@
 <Solution>
   <Folder Name="/tests/">
     <Project Path="tests/Notify.Shared.Tests/Notify.Shared.Tests.csproj" />
+    <Project Path="tests/Notify.IngestionApi.Tests/Notify.IngestionApi.Tests.csproj" />
   </Folder>
   <Project Path="Notify.Shared/Notify.Shared.csproj" />
+  <Project Path="Notify.IngestionApi/Notify.IngestionApi.csproj" />
 </Solution>
