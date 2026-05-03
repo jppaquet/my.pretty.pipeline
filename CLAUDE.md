@@ -30,6 +30,7 @@ docs/                      SCHEMA, DEPLOY, PROJECT-ONBOARDING
 - Tests: xUnit. Integration tests use `[Trait("Category","Integration")]`.
 - JSON: always go through `Notify.Shared.Json.NotifyJson.Options` (camelCase, lowercase enum, omit-null) so client/server/tests round-trip identically.
 - Branches: feature branch → PR → squash-merge. No direct push to `main`. Branch protection is paywalled on private repos (GitHub Pro), so it's solo-discipline.
+- **iOS testing is local-only — no cloud CI runs Xcode.** A pre-push git hook (`app/scripts/pre-push`) runs `swiftlint --strict` + `xcodebuild test` on iPhone 16 sim when the outgoing range touches `app/**`. Install per clone with `bash app/scripts/install-hook.sh`. Bypass with `git push --no-verify`. The signing pipeline (`cd-testflight.yml`) still runs on macos-15 but only on `v*.*.*` tags.
 
 ## Azure (dev)
 - Subscription: `JPP-SUB` (`e9e3fab7-6c1d-4778-8196-b6ca90a7c438`). Tenant `0e1e585f-75cb-49a4-8a1d-c29068adf4eb`.

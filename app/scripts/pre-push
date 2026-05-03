@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+#
+# Pre-push hook: when the outgoing range touches app/**, run SwiftLint
+# (strict) and xcodebuild test (iPhone 16 sim, no codesign). Block the
+# push if either fails. No-ops when no app/ changes are in flight.
+#
+# Install: bash app/scripts/install-hook.sh
+# Bypass:  git push --no-verify     (use sparingly)
+#
+# Stdin format from `git push`: `<local_ref> <local_sha> <remote_ref> <remote_sha>`
+# per line.
+
+set -e
+
+ZERO="0000000000000000000000000000000000000000"
+REPO="$(git rev-parse --show-toplevel)"
+APP_TOUCHED=0
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+    [ "$local_sha" = "$ZERO" ] && continue   # branch deletion
+
+    if [ "$remote_sha" = "$ZERO" ]; then
+        base="$(git merge-base "$local_sha" origin/main 2>/dev/null || echo "$ZERO")"
+        [ "$base" = "$ZERO" ] && continue
+        range="${base}..${local_sha}"
+    else
+        range="${remote_sha}..${local_sha}"
+    fi
+
+    # Ignore meta paths that don't affect the build (hook scripts, lint config).
+    if [ -n "$(git diff --name-only "$range" -- 'app/' ':(exclude)app/scripts/' ':(exclude)app/.swiftlint.yml' 2>/dev/null)" ]; then
+        APP_TOUCHED=1
+        break
+    fi
+done
+
+if [ "$APP_TOUCHED" = "0" ]; then
+    exit 0
+fi
+
+echo "→ pre-push: app/** changed; running SwiftLint + xcodebuild test (iPhone 16)"
+cd "${REPO}/app"
+
+if command -v swiftlint >/dev/null 2>&1; then
+    swiftlint --strict
+else
+    echo "  ! swiftlint not installed; skipping (brew install swiftlint)" >&2
+fi
+
+xcodebuild test \
+    -project Notify.xcodeproj \
+    -scheme Notify \
+    -destination 'platform=iOS Simulator,name=iPhone 16' \
+    -resultBundlePath "/tmp/notify-prepush-$$.xcresult" \
+    CODE_SIGNING_ALLOWED=NO \
+    -quiet
+
+rm -rf "/tmp/notify-prepush-$$.xcresult"
+echo "✓ pre-push: iOS checks passed"
