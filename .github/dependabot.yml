@@ -1,0 +1,70 @@
+# Dependabot config — daily dep updates across NuGet (all .NET projects)
+# and GitHub Actions (workflow file pins).
+#
+# Grouped to keep PR volume sane: related Azure/Microsoft packages bundle
+# into one PR per day rather than 5+ separate ones.
+
+version: 2
+
+updates:
+  # ─────────────────────────────────────────────────────────────────
+  # NuGet — every Notify.* project. Paths that don't exist yet (e.g. on
+  # branches that haven't landed) are silently skipped by Dependabot.
+  # ─────────────────────────────────────────────────────────────────
+  - package-ecosystem: "nuget"
+    directories:
+      - "/src/Notify.Shared"
+      - "/src/Notify.IngestionApi"
+      - "/src/Notify.Archive"
+      - "/src/tests/Notify.Shared.Tests"
+      - "/src/tests/Notify.IngestionApi.Tests"
+      - "/src/tests/Notify.Archive.Tests"
+      - "/src/tests/Notify.E2E"
+    schedule:
+      interval: "daily"
+      time: "07:00"
+      timezone: "America/Toronto"
+    open-pull-requests-limit: 10
+    labels:
+      - "deps"
+      - "deps:nuget"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    groups:
+      azure-functions-worker:
+        patterns:
+          - "Microsoft.Azure.Functions.Worker*"
+      azure-sdks:
+        patterns:
+          - "Azure.*"
+          - "Microsoft.Azure.Cosmos"
+      microsoft-extensions:
+        patterns:
+          - "Microsoft.Extensions.*"
+          - "Microsoft.ApplicationInsights*"
+      xunit:
+        patterns:
+          - "xunit*"
+          - "Xunit.*"
+          - "Microsoft.NET.Test.Sdk"
+          - "coverlet.*"
+
+  # ─────────────────────────────────────────────────────────────────
+  # GitHub Actions — keeps `uses: actions/checkout@v4` etc. current.
+  # ─────────────────────────────────────────────────────────────────
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "daily"
+      time: "07:00"
+      timezone: "America/Toronto"
+    labels:
+      - "deps"
+      - "deps:actions"
+    commit-message:
+      prefix: "deps(actions)"
+    groups:
+      actions-all:
+        patterns:
+          - "*"
