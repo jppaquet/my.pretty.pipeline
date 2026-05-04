@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+#
+# Pre-push hook for my.pretty.pipeline.
+#
+# Runs the cheap-but-load-bearing checks before any push so PRs don't burn
+# CI minutes on stuff a 30-second local check would catch. Each block runs
+# only when the outgoing range touches files it cares about.
+#
+# Checks (in order):
+#   1. gitleaks scan of the outgoing commit range          (always)
+#   2. dotnet build -warnaserror + unit tests              (src/**)
+#   3. bicep build of every infra/**/*.bicep file          (infra/**)
+#   4. swiftlint --strict + xcodebuild test (iPhone 16)    (app/**)
+#
+# Install:  bash scripts/install-hooks.sh
+# Bypass:   git push --no-verify       (use sparingly — CI will catch)
+#
+# stdin format from `git push`: `<local_ref> <local_sha> <remote_ref> <remote_sha>`
+# per line.
+
+set -eo pipefail
+
+ZERO="0000000000000000000000000000000000000000"
+REPO="$(git rev-parse --show-toplevel)"
+LOG_PFX="→ pre-push:"
+
+# ── Collect outgoing ranges ──────────────────────────────────────────
+RANGES=()
+while read -r local_ref local_sha remote_ref remote_sha; do
+    [ "$local_sha" = "$ZERO" ] && continue   # branch deletion
+
+    if [ "$remote_sha" = "$ZERO" ]; then
+        # New branch on remote — diff against origin/main as the merge base.
+        base="$(git merge-base "$local_sha" origin/main 2>/dev/null || echo "$ZERO")"
+        [ "$base" = "$ZERO" ] && continue
+        RANGES+=("${base}..${local_sha}")
+    else
+        RANGES+=("${remote_sha}..${local_sha}")
+    fi
+done
+
+if [ "${#RANGES[@]}" -eq 0 ]; then
+    exit 0
+fi
+
+# Did the outgoing range touch any of the given pathspecs?
+touched() {
+    [ -n "$(git diff --name-only "${RANGES[@]}" -- "$@" 2>/dev/null)" ]
+}
+
+# ── 1. gitleaks ──────────────────────────────────────────────────────
+# Secrets are the only check we refuse to skip on a missing tool: this is a
+# repo-going-public hook; a forgotten install means a forgotten guarantee.
+if ! command -v gitleaks >/dev/null 2>&1; then
+    echo "✗ gitleaks not installed. Install with: brew install gitleaks" >&2
+    echo "  (or use 'git push --no-verify' to bypass once)" >&2
+    exit 1
+fi
+
+echo "$LOG_PFX gitleaks scan over outgoing range"
+for r in "${RANGES[@]}"; do
+    gitleaks detect --no-banner --redact --log-opts="$r"
+done
+
+# ── 2. .NET ──────────────────────────────────────────────────────────
+if touched 'src/**'; then
+    if command -v dotnet >/dev/null 2>&1; then
+        echo "$LOG_PFX dotnet build -warnaserror + unit tests"
+        ( cd "${REPO}/src" \
+          && dotnet build Notify.slnx -c Release -warnaserror \
+          && dotnet test Notify.slnx -c Release --no-build \
+              --filter 'Category!=Integration&Category!=E2E' )
+    else
+        echo "  ! dotnet not installed; skipping src/ checks" >&2
+    fi
+fi
+
+# ── 3. Bicep ─────────────────────────────────────────────────────────
+if touched 'infra/**'; then
+    bicep_build() {
+        # Standalone `bicep` takes the path positionally; `az bicep` requires `--file`.
+        if command -v bicep >/dev/null 2>&1; then
+            bicep build --stdout "$1" >/dev/null
+        elif command -v az >/dev/null 2>&1; then
+            az bicep build --file "$1" --stdout >/dev/null
+        else
+            return 127
+        fi
+    }
+    if command -v bicep >/dev/null 2>&1 || command -v az >/dev/null 2>&1; then
+        echo "$LOG_PFX bicep build (every .bicep under infra/)"
+        while IFS= read -r f; do
+            bicep_build "$f"
+        done < <(find "${REPO}/infra" -name '*.bicep' -type f)
+    else
+        echo "  ! neither 'bicep' nor 'az' on PATH; skipping infra/ checks" >&2
+    fi
+fi
+
+# ── 4. iOS ───────────────────────────────────────────────────────────
+if touched 'app/**' ':(exclude)app/scripts/**' ':(exclude)app/.swiftlint.yml'; then
+    echo "$LOG_PFX swiftlint + xcodebuild test (iPhone 16 simulator)"
+    cd "${REPO}/app"
+    if command -v swiftlint >/dev/null 2>&1; then
+        swiftlint --strict
+    else
+        echo "  ! swiftlint not installed (brew install swiftlint); skipping lint" >&2
+    fi
+    xcodebuild test \
+        -project Notify.xcodeproj \
+        -scheme Notify \
+        -destination 'platform=iOS Simulator,name=iPhone 16' \
+        -resultBundlePath "/tmp/notify-prepush-$$.xcresult" \
+        CODE_SIGNING_ALLOWED=NO \
+        -quiet
+    rm -rf "/tmp/notify-prepush-$$.xcresult"
+    cd "$REPO"
+fi
+
+echo "✓ pre-push: all checks passed"

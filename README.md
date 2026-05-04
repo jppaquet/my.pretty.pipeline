@@ -25,6 +25,7 @@ The architectural plan lives at `~/.claude/plans/that-the-begining-of-validated-
 ## Quick start (local dev)
 
 ```sh
+bash scripts/install-hooks.sh               # pre-push: gitleaks + build + tests + bicep + iOS
 docker compose up -d                        # Azurite + Cosmos emulator + EG stub
 cd src && dotnet test                       # unit + integration
 open app/Notify.xcodeproj                   # iOS app (requires Xcode)
