@@ -1,0 +1,9 @@
+# Test fixture key — placeholder, no entropy. The `npk_` prefix is the
+# documented project-key format from `docs/SCHEMA.md`.
+e9988644535694ab49b732b938a583221cced254:src/tests/Notify.Shared.Tests/ApiKeyHasherTests.cs:generic-api-key:14
+85f1662dfd77216c7e9f62832d4ec708094423a2:src/tests/Notify.Shared.Tests/ApiKeyHasherTests.cs:generic-api-key:14
+
+# Microsoft's publicly documented Azure Cosmos DB Emulator master key —
+# identical for every developer; not a secret.
+# https://learn.microsoft.com/en-us/azure/cosmos-db/emulator
+f7e13dcaf923ce46411967085e77e80fdfc8f286:.github/workflows/ci-functions.yml:generic-api-key:61

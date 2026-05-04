@@ -1,5 +1,7 @@
 # my.pretty.pipeline
 
+Personal project — no support, no contributions expected, public for transparency and free CI minutes. MIT-licensed.
+
 Generic notification pipeline for personal projects. One HTTP API, one event broker, one inbox on iPhone/iPad.
 
 ```
