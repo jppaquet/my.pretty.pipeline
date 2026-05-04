@@ -2,7 +2,10 @@
   <Folder Name="/tests/">
     <Project Path="tests/Notify.Shared.Tests/Notify.Shared.Tests.csproj" />
     <Project Path="tests/Notify.IngestionApi.Tests/Notify.IngestionApi.Tests.csproj" />
+    <Project Path="tests/Notify.Archive.Tests/Notify.Archive.Tests.csproj" />
+    <Project Path="tests/Notify.E2E/Notify.E2E.csproj" />
   </Folder>
   <Project Path="Notify.Shared/Notify.Shared.csproj" />
   <Project Path="Notify.IngestionApi/Notify.IngestionApi.csproj" />
+  <Project Path="Notify.Archive/Notify.Archive.csproj" />
 </Solution>
