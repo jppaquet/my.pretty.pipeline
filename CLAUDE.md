@@ -32,8 +32,7 @@ docs/                      SCHEMA, DEPLOY, PROJECT-ONBOARDING
 - Branches: feature branch → PR → squash-merge. No direct push to `main`. Branch protection is paywalled on private repos (GitHub Pro), so it's solo-discipline.
 
 ## Azure (dev)
-- Subscription: `JPP-SUB` (`e9e3fab7-6c1d-4778-8196-b6ca90a7c438`). Tenant `0e1e585f-75cb-49a4-8a1d-c29068adf4eb`.
-- RG: `rg-notify-dev`.
+- RG: `rg-notify-dev` in `canadacentral`. Subscription + tenant GUIDs are not committed; they live in GitHub Actions repo variables (`AZURE_SUBSCRIPTION_ID`, `AZURE_TENANT_ID`) for CI and in the maintainer's local memory for `az` work.
 - MI: `mi-notify-dev`. Has `Contributor` + `User Access Administrator` on the RG.
 - All globally-unique resource names are salted with `take(uniqueString(rg.id), 6)` (current suffix: `nrajdy`). **Never hardcode them in scripts** — look up via `az <kind> list -g $RG --query "[0].name" -o tsv`.
 - GitHub repo vars (set, non-secret): `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_RG_DEV`.
