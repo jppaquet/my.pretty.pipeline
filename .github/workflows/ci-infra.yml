@@ -11,7 +11,23 @@ permissions:
   pull-requests: write     # post what-if diff as PR comment
 
 jobs:
+  changes:
+    runs-on: ubuntu-24.04
+    outputs:
+      relevant: ${{ steps.filter.outputs.relevant }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            relevant:
+              - 'infra/**'
+              - '.github/workflows/ci-infra.yml'
+
   bicep-build:
+    needs: changes
+    if: needs.changes.outputs.relevant == 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
@@ -35,8 +51,8 @@ jobs:
           exit $fail
 
   what-if:
-    needs: bicep-build
-    if: github.event_name == 'pull_request'
+    needs: [changes, bicep-build]
+    if: github.event_name == 'pull_request' && needs.changes.outputs.relevant == 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
