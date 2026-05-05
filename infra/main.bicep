@@ -16,6 +16,17 @@ param env string = 'dev'
 @description('Azure region. Defaults to the resource group location.')
 param location string = resourceGroup().location
 
+// EG endpoint validation requires the target Function to exist on the production
+// slot before the subscription can be created. cd-deploy.yml deploys this template
+// twice: pass 1 with both flags false (creates the Function App), then publishes
+// + slot-swaps the Function code, then pass 2 with the matching flag true to
+// create the EG subscription against an already-registered function endpoint.
+@description('Phase 1+: provision the EG archive subscription. Set true only after Notify.Archive code is on the production slot.')
+param enableArchiveSubscription bool = false
+
+@description('Phase 2+: provision the EG push subscription. Set true only after Notify.PushDelivery code is on the production slot.')
+param enablePushSubscription bool = false
+
 var namePrefix = 'notify'
 var tags = {
   project: 'my.pipeline'
@@ -78,7 +89,8 @@ module eventgrid 'modules/eventgrid.bicep' = {
     env: env
     tags: tags
     functionAppName: functions.outputs.functionAppName
-    enableArchiveSubscription: true
+    enableArchiveSubscription: enableArchiveSubscription
+    enablePushSubscription: enablePushSubscription
   }
 }
 

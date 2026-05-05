@@ -19,13 +19,28 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Pass 1: deploy infra with all EG-function subscriptions disabled.
+  # ARM validates EG sub endpoints against the production slot's registered
+  # functions, which don't exist until publish-functions + swap-slots runs.
   deploy-infra:
     runs-on: ubuntu-24.04
     outputs:
       function_app_name: ${{ steps.outputs.outputs.functionAppName }}
       function_app_hostname: ${{ steps.outputs.outputs.functionAppHostname }}
+      enable_archive_sub: ${{ steps.flags.outputs.archive }}
+      enable_push_sub: ${{ steps.flags.outputs.push }}
     steps:
       - uses: actions/checkout@v6
+
+      - name: Compute EG-sub flags from project presence
+        id: flags
+        run: |
+          archive=false
+          push=false
+          [ -d "src/Notify.Archive" ] && archive=true
+          [ -d "src/Notify.PushDelivery" ] && push=true
+          echo "archive=${archive}" >> "$GITHUB_OUTPUT"
+          echo "push=${push}" >> "$GITHUB_OUTPUT"
 
       - name: Azure login (OIDC)
         uses: azure/login@v3
@@ -34,20 +49,19 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Deploy infra (Bicep)
+      - name: Deploy infra (Bicep) — pass 1, EG subs disabled
         id: deploy
         uses: azure/arm-deploy@v2
         with:
           scope: resourcegroup
           resourceGroupName: ${{ vars.AZURE_RG_DEV }}
           template: infra/main.bicep
-          parameters: env=dev
+          parameters: env=dev enableArchiveSubscription=false enablePushSubscription=false
           failOnStdErr: false
 
       - name: Capture outputs
         id: outputs
         run: |
-          # Will become populated once functions.bicep is filled in (Phase 1+).
           NAME="${{ steps.deploy.outputs.functionAppName }}"
           HOST="${{ steps.deploy.outputs.functionAppHostname }}"
           echo "functionAppName=${NAME:-}" >> "$GITHUB_OUTPUT"
@@ -105,20 +119,10 @@ jobs:
             --slot staging \
             --src ./package.zip
 
-  e2e:
-    needs: [deploy-infra, publish-functions]
-    if: |
-      always() &&
-      needs.deploy-infra.result == 'success' &&
-      (needs.publish-functions.result == 'success' || needs.publish-functions.result == 'skipped')
-    uses: ./.github/workflows/e2e.yml
-    with:
-      target_hostname: ${{ needs.deploy-infra.outputs.function_app_hostname }}
-      slot: staging
-    secrets: inherit
-
+  # Promote staging → production so the production slot has the function
+  # endpoints registered before pass 2 creates EG subs that target them.
   swap-slots:
-    needs: [deploy-infra, e2e]
+    needs: [deploy-infra, publish-functions]
     if: success() && needs.deploy-infra.outputs.function_app_name != ''
     runs-on: ubuntu-24.04
     steps:
@@ -135,3 +139,50 @@ jobs:
             -g "${{ vars.AZURE_RG_DEV }}" \
             -n "${{ needs.deploy-infra.outputs.function_app_name }}" \
             --slot staging --target-slot production
+
+  # Pass 2: re-deploy infra with EG subs enabled now that the production slot
+  # has the matching function endpoints registered (post-swap). Skipped when
+  # neither the archive nor push project exists yet (Phase 0).
+  enable-eventgrid-subs:
+    needs: [deploy-infra, swap-slots]
+    if: |
+      success() &&
+      (needs.deploy-infra.outputs.enable_archive_sub == 'true' ||
+       needs.deploy-infra.outputs.enable_push_sub == 'true')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v3
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy infra (Bicep) — pass 2, EG subs enabled
+        uses: azure/arm-deploy@v2
+        with:
+          scope: resourcegroup
+          resourceGroupName: ${{ vars.AZURE_RG_DEV }}
+          template: infra/main.bicep
+          parameters: >-
+            env=dev
+            enableArchiveSubscription=${{ needs.deploy-infra.outputs.enable_archive_sub }}
+            enablePushSubscription=${{ needs.deploy-infra.outputs.enable_push_sub }}
+          failOnStdErr: false
+
+  # E2E runs last, against the production slot, so EG subs (if applicable) are
+  # in place and the test exercises the actually-deployed system.
+  e2e:
+    needs: [deploy-infra, swap-slots, enable-eventgrid-subs]
+    if: |
+      always() &&
+      needs.deploy-infra.result == 'success' &&
+      needs.swap-slots.result == 'success' &&
+      (needs.enable-eventgrid-subs.result == 'success' || needs.enable-eventgrid-subs.result == 'skipped')
+    uses: ./.github/workflows/e2e.yml
+    with:
+      target_hostname: ${{ needs.deploy-infra.outputs.function_app_hostname }}
+      slot: production
+    secrets: inherit
