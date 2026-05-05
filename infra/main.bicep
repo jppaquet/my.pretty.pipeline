@@ -78,6 +78,7 @@ module eventgrid 'modules/eventgrid.bicep' = {
     env: env
     tags: tags
     functionAppName: functions.outputs.functionAppName
+    enableArchiveSubscription: true
   }
 }
 
