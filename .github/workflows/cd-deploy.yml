@@ -20,8 +20,9 @@ concurrency:
 
 jobs:
   # Pass 1: deploy infra with all EG-function subscriptions disabled.
-  # ARM validates EG sub endpoints against the production slot's registered
-  # functions, which don't exist until publish-functions + swap-slots runs.
+  # ARM validates EG sub endpoints against registered functions, which don't
+  # exist on the Function App until publish-functions runs. Flex Consumption
+  # has no deployment slots so we publish straight to production.
   deploy-infra:
     runs-on: ubuntu-24.04
     outputs:
@@ -112,43 +113,19 @@ jobs:
           dotnet publish "src/${{ matrix.project }}/${{ matrix.project }}.csproj" \
             -c Release -o ./publish
 
-      # Azure/functions-action handles Linux Consumption + .NET isolated
-      # correctly. The older `az functionapp deployment source config-zip`
-      # path goes through Kudu which returns 503 on Linux Consumption.
-      - name: Publish ${{ matrix.project }} to staging slot
+      # Azure/functions-action handles Flex Consumption deployment correctly
+      # via Run-From-Package + storage SAS.
+      - name: Publish ${{ matrix.project }}
         if: steps.gate.outputs.exists == 'true'
         uses: Azure/functions-action@v1
         with:
           app-name: ${{ needs.deploy-infra.outputs.function_app_name }}
-          slot-name: staging
           package: ./publish
 
-  # Promote staging → production so the production slot has the function
-  # endpoints registered before pass 2 creates EG subs that target them.
-  swap-slots:
-    needs: [deploy-infra, publish-functions]
-    if: success() && needs.deploy-infra.outputs.function_app_name != ''
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Azure login (OIDC)
-        uses: azure/login@v3
-        with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Swap staging → production
-        run: |
-          az functionapp deployment slot swap \
-            -g "${{ vars.AZURE_RG_DEV }}" \
-            -n "${{ needs.deploy-infra.outputs.function_app_name }}" \
-            --slot staging --target-slot production
-
-  # Pass 2: re-deploy infra with EG subs enabled now that the production slot
-  # has the matching function endpoints registered (post-swap). Skipped when
-  # neither the archive nor push project exists yet (Phase 0).
+  # Pass 2: re-deploy infra with EG subs enabled now that the function endpoints
+  # are registered. Skipped when neither archive nor push project exists yet.
   enable-eventgrid-subs:
-    needs: [deploy-infra, swap-slots]
+    needs: [deploy-infra, publish-functions]
     if: |
       success() &&
       (needs.deploy-infra.outputs.enable_archive_sub == 'true' ||
@@ -176,14 +153,14 @@ jobs:
             enablePushSubscription=${{ needs.deploy-infra.outputs.enable_push_sub }}
           failOnStdErr: false
 
-  # E2E runs last, against the production slot, so EG subs (if applicable) are
-  # in place and the test exercises the actually-deployed system.
+  # E2E runs against the deployed Function App after EG subs (if any) are
+  # in place. Without a staging slot, "production" is the only target.
   e2e:
-    needs: [deploy-infra, swap-slots, enable-eventgrid-subs]
+    needs: [deploy-infra, publish-functions, enable-eventgrid-subs]
     if: |
       always() &&
       needs.deploy-infra.result == 'success' &&
-      needs.swap-slots.result == 'success' &&
+      needs.publish-functions.result == 'success' &&
       (needs.enable-eventgrid-subs.result == 'success' || needs.enable-eventgrid-subs.result == 'skipped')
     uses: ./.github/workflows/e2e.yml
     with:
