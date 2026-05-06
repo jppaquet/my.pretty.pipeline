@@ -1,6 +1,8 @@
-// Function App on Consumption Plan, .NET 10 isolated worker.
-// Hosts every Notify.* Function project. Production traffic ↔ `production` slot;
-// cd-deploy.yml swaps `staging` → `production` only after e2e is green.
+// Function App on Flex Consumption Plan, .NET 10 isolated worker.
+// Hosts every Notify.* Function project. Linux Consumption (Y1) does NOT
+// support .NET 10 — only Flex Consumption (FC1) does. Flex doesn't support
+// deployment slots, so cd-deploy.yml publishes straight to production.
+// Reference: https://learn.microsoft.com/en-us/azure/azure-functions/dotnet-isolated-process-guide
 
 @description('Azure region.')
 param location string
@@ -26,6 +28,10 @@ var appInsightsName = 'appi-${namePrefix}-${env}'
 var workspaceName = 'log-${namePrefix}-${env}'
 // Function App names are globally unique (DNS for *.azurewebsites.net). Salted.
 var functionAppName = 'func-${namePrefix}-${env}-${take(uniqueString(resourceGroup().id), 6)}'
+// Flex Consumption requires a blob container that the platform pulls deployment
+// packages from. Created on the same storage account; the Function App's
+// SystemAssigned identity reads from it via AzureWebJobsStorage.
+var deploymentContainerName = 'app-package'
 
 resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   name: storageName
@@ -38,13 +44,22 @@ resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
     allowBlobPublicAccess: false
     supportsHttpsTrafficOnly: true
   }
+
+  resource blobServices 'blobServices' = {
+    name: 'default'
+
+    resource deploymentContainer 'containers' = {
+      name: deploymentContainerName
+      properties: { publicAccess: 'None' }
+    }
+  }
 }
 
 resource plan 'Microsoft.Web/serverfarms@2023-12-01' = {
   name: planName
   location: location
   tags: tags
-  sku: { name: 'Y1', tier: 'Dynamic' }
+  sku: { name: 'FC1', tier: 'FlexConsumption' }
   kind: 'functionapp,linux'
   properties: { reserved: true }
 }
@@ -76,49 +91,42 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
   properties: {
     serverFarmId: plan.id
     httpsOnly: true
+    functionAppConfig: {
+      deployment: {
+        storage: {
+          type: 'blobContainer'
+          value: '${storage.properties.primaryEndpoints.blob}${deploymentContainerName}'
+          authentication: {
+            type: 'StorageAccountConnectionString'
+            storageAccountConnectionStringName: 'AzureWebJobsStorage'
+          }
+        }
+      }
+      runtime: {
+        name: 'dotnet-isolated'
+        version: '10.0'
+      }
+      scaleAndConcurrency: {
+        maximumInstanceCount: 100
+        instanceMemoryMB: 2048
+      }
+    }
     siteConfig: {
-      linuxFxVersion: 'DOTNET-ISOLATED|10'
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'
       appSettings: [
         { name: 'AzureWebJobsStorage', value: 'DefaultEndpointsProtocol=https;AccountName=${storage.name};EndpointSuffix=${environment().suffixes.storage};AccountKey=${storage.listKeys().keys[0].value}' }
-        { name: 'FUNCTIONS_EXTENSION_VERSION', value: '~4' }
-        { name: 'FUNCTIONS_WORKER_RUNTIME', value: 'dotnet-isolated' }
         { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsights.properties.ConnectionString }
         { name: 'COSMOS_ACCOUNT_NAME', value: cosmosAccountName }
         { name: 'KEY_VAULT_NAME', value: keyVaultName }
       ]
     }
   }
-}
-
-resource stagingSlot 'Microsoft.Web/sites/slots@2023-12-01' = {
-  parent: functionApp
-  name: 'staging'
-  location: location
-  tags: tags
-  kind: 'functionapp,linux'
-  identity: { type: 'SystemAssigned' }
-  properties: {
-    serverFarmId: plan.id
-    httpsOnly: true
-    siteConfig: {
-      linuxFxVersion: 'DOTNET-ISOLATED|10'
-      ftpsState: 'Disabled'
-      minTlsVersion: '1.2'
-      appSettings: [
-        { name: 'AzureWebJobsStorage', value: 'DefaultEndpointsProtocol=https;AccountName=${storage.name};EndpointSuffix=${environment().suffixes.storage};AccountKey=${storage.listKeys().keys[0].value}' }
-        { name: 'FUNCTIONS_EXTENSION_VERSION', value: '~4' }
-        { name: 'FUNCTIONS_WORKER_RUNTIME', value: 'dotnet-isolated' }
-        { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsights.properties.ConnectionString }
-        { name: 'COSMOS_ACCOUNT_NAME', value: cosmosAccountName }
-        { name: 'KEY_VAULT_NAME', value: keyVaultName }
-      ]
-    }
-  }
+  dependsOn: [
+    storage::blobServices::deploymentContainer
+  ]
 }
 
 output functionAppName string = functionApp.name
 output defaultHostname string = functionApp.properties.defaultHostName
 output principalIdProduction string = functionApp.identity.principalId
-output principalIdStaging string = stagingSlot.identity.principalId
