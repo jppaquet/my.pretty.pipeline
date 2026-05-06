@@ -4,10 +4,12 @@
     <Project Path="tests/Notify.IngestionApi.Tests/Notify.IngestionApi.Tests.csproj" />
     <Project Path="tests/Notify.Archive.Tests/Notify.Archive.Tests.csproj" />
     <Project Path="tests/Notify.DeviceApi.Tests/Notify.DeviceApi.Tests.csproj" />
+    <Project Path="tests/Notify.PushDelivery.Tests/Notify.PushDelivery.Tests.csproj" />
     <Project Path="tests/Notify.E2E/Notify.E2E.csproj" />
   </Folder>
   <Project Path="Notify.Shared/Notify.Shared.csproj" />
   <Project Path="Notify.IngestionApi/Notify.IngestionApi.csproj" />
   <Project Path="Notify.Archive/Notify.Archive.csproj" />
   <Project Path="Notify.DeviceApi/Notify.DeviceApi.csproj" />
+  <Project Path="Notify.PushDelivery/Notify.PushDelivery.csproj" />
 </Solution>
