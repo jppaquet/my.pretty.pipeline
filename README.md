@@ -27,7 +27,7 @@ No SDK, by design.
 
 | | |
 |---|---|
-| Backend | .NET 10 isolated-worker Azure Functions, Consumption Plan |
+| Backend | .NET 10 isolated-worker Azure Functions, Flex Consumption |
 | Broker | Event Grid Custom Topic, CloudEvents 1.0 |
 | Storage | Cosmos DB NoSQL, Free tier, 90-day TTL |
 | Push | Notification Hubs Free tier → APNs |

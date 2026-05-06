@@ -3,7 +3,7 @@
 Generic notification pipeline: producer → IngestionApi → Event Grid → {PushDelivery → NH → APNs → iOS, Archive → Cosmos ← InboxApi}. Architecture lives in `~/.claude/plans/that-the-begining-of-validated-lecun.md`.
 
 ## Stack
-- Backend: .NET 10 isolated-worker Azure Functions (Consumption). Solution: `src/Notify.slnx` (not `.sln`).
+- Backend: .NET 10 isolated-worker Azure Functions on **Flex Consumption** (FC1). Linux Y1/Consumption can't run .NET 10 — locked to Flex per [MS docs](https://learn.microsoft.com/en-us/azure/azure-functions/dotnet-isolated-process-guide). Solution: `src/Notify.slnx` (not `.sln`).
 - Mobile: SwiftUI universal (iPhone + iPad), iOS 17+, bundle id `my.pretty.pipeline`. Source of truth: `app/Notify.xcodeproj` (committed). **No xcodegen, no `project.yml`.**
 - IaC: Bicep. Region `canadacentral`. CI/CD: GitHub Actions, OIDC.
 
@@ -40,14 +40,16 @@ docs/                      SCHEMA, DEPLOY, PROJECT-ONBOARDING
 
 ## Deploy model
 - **Bootstrap (manual, once per RG):** `az deployment group create --template-file infra/modules/github-oidc.bicep …`. Mints MI + federated credentials + role assignments. Re-run any time `rg-notify-dev` is wiped.
-- **Day-2 (CI):** push to `main` → `cd-deploy.yml` runs `az deployment group create infra/main.bicep` over OIDC. Idempotent. **Don't run main.bicep manually** — keep cd-deploy as the only path.
-- `cd-deploy.yml` triggers on `push: branches: [main]` directly; it does NOT gate on `ci-functions` / `ci-infra` (known gap, separate fix when prioritized).
+- **Day-2 (CI):** push to `main` → `cd-deploy.yml` runs over OIDC. Two-pass infra deploy: pass 1 with EG subs disabled, publish functions via `Azure/functions-action@v1`, pass 2 with EG subs enabled (subs reference function endpoints that don't exist until publish runs). E2E runs last against the deployed app. Flex doesn't support deployment slots — publish lands on production directly.
+- **Don't run main.bicep manually** — keep cd-deploy as the only path. Don't `az functionapp deployment source config-zip` either; it routes through Kudu which 503s on Flex.
 
 ## Hard rules
 - Don't reintroduce xcodegen / `project.yml`. Edit through Xcode UI.
 - Don't put role assignments at RG scope inside `main.bicep` — they belong in `github-oidc.bicep` (bootstrap-only).
 - Don't hardcode salted resource names in docs / scripts / Function code — look them up.
 - Don't add `AZURE_CREDENTIALS` JSON or any long-lived Azure secret. The pipeline is OIDC-only by design.
+- Don't switch the Function App back to Y1/Consumption — .NET 10 Linux only runs on FC1/Flex.
+- Don't add a deployment-slot resource to `functions.bicep` — Flex Consumption rejects slot creation.
 
 ## Phase status
-Phase 0 done (scaffold + CI/CD + dev RG provisioned). Phase 1 in progress: PR-1.A (`Notify.Shared` contract) is open as PR #8. Roadmap in `~/.claude/plans/what-s-next-keen-meadow.md`.
+Phase 0 + Phase 1 done (ingestion + archive deployed and green end-to-end on dev RG). Phase 2 next: push delivery (`Notify.PushDelivery`, `Notify.DeviceApi`, NH credential upload). Roadmap in `~/.claude/plans/what-s-next-keen-meadow.md`.
