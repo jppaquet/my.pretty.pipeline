@@ -22,6 +22,13 @@ param cosmosAccountName string
 @description('Key Vault name (for @Microsoft.KeyVault references).')
 param keyVaultName string
 
+@description('Notification Hub full SAS connection string (DeviceApi + PushDelivery).')
+@secure()
+param notificationHubConnectionString string
+
+@description('Notification Hub name (DeviceApi + PushDelivery).')
+param notificationHubName string
+
 var storageName = toLower('st${namePrefix}${env}${uniqueString(resourceGroup().id)}')
 var planName = 'plan-${namePrefix}-${env}'
 var appInsightsName = 'appi-${namePrefix}-${env}'
@@ -119,6 +126,11 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
         { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsights.properties.ConnectionString }
         { name: 'COSMOS_ACCOUNT_NAME', value: cosmosAccountName }
         { name: 'KEY_VAULT_NAME', value: keyVaultName }
+        // DeviceApi (Notify.DeviceApi/DeviceApiOptions.cs) reads these via
+        // ConfigureFunctionsWorkerDefaults binding. PushDelivery will consume
+        // the same pair when it lands.
+        { name: 'NotificationHubConnectionString', value: notificationHubConnectionString }
+        { name: 'NotificationHubName', value: notificationHubName }
       ]
     }
   }

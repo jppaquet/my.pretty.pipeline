@@ -33,5 +33,17 @@ resource hub 'Microsoft.NotificationHubs/namespaces/notificationHubs@2023-09-01'
   properties: {}
 }
 
+// Default authorization rule with Manage permissions — created automatically
+// alongside every NH. We listKeys against it to surface the connection string
+// to consumers (DeviceApi for CreateOrUpdateInstallation, PushDelivery for
+// SendNotification). Treat the output as sensitive — only flow it to other
+// modules' app settings, never log it.
+resource defaultRule 'Microsoft.NotificationHubs/namespaces/notificationHubs/AuthorizationRules@2023-09-01' existing = {
+  parent: hub
+  name: 'DefaultFullSharedAccessSignature'
+}
+
 output namespaceName string = namespace.name
 output hubName string = hub.name
+@secure()
+output hubConnectionString string = defaultRule.listKeys().primaryConnectionString

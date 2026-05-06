@@ -67,6 +67,20 @@ module keyvault 'modules/keyvault.bicep' = {
   }
 }
 
+// Notification Hubs Free tier — namespace + hub. The connection string is
+// consumed by the Function App as an app setting (DeviceApi for installation
+// upserts; Phase-2+ PushDelivery for sends). APNs .p8 upload remains manual
+// — Bicep doesn't accept the file contents directly.
+module notificationHub 'modules/notificationhub.bicep' = {
+  name: 'notification-hub-${env}'
+  params: {
+    location: location
+    namePrefix: namePrefix
+    env: env
+    tags: tags
+  }
+}
+
 // Function App + Storage + App Insights (all five Functions live here).
 module functions 'modules/functions.bicep' = {
   name: 'functions-${env}'
@@ -77,6 +91,8 @@ module functions 'modules/functions.bicep' = {
     tags: tags
     cosmosAccountName: cosmos.outputs.accountName
     keyVaultName: keyvault.outputs.vaultName
+    notificationHubConnectionString: notificationHub.outputs.hubConnectionString
+    notificationHubName: notificationHub.outputs.hubName
   }
 }
 
@@ -91,18 +107,6 @@ module eventgrid 'modules/eventgrid.bicep' = {
     functionAppName: functions.outputs.functionAppName
     enableArchiveSubscription: enableArchiveSubscription
     enablePushSubscription: enablePushSubscription
-  }
-}
-
-// ── PHASE 2 ─────────────────────────────────────────────────────────
-// Notification Hubs Free tier — namespace + hub.
-module notificationHub 'modules/notificationhub.bicep' = {
-  name: 'notification-hub-${env}'
-  params: {
-    location: location
-    namePrefix: namePrefix
-    env: env
-    tags: tags
   }
 }
 
