@@ -9,14 +9,19 @@ Generic notification pipeline: producer → IngestionApi → Event Grid → {Pus
 
 ## Layout
 ```
-src/Notify.Shared/         shared contract, validation, hashing
-src/Notify.{Api,…}/        Function projects (one per endpoint, Phase 1+)
-src/tests/Notify.*.Tests/  xUnit; Trait("Category","Integration") for integration
-infra/main.bicep           cd-deploy template
-infra/modules/             one bicep per Azure resource
+src/Notify.Shared/                shared contract, validation, hashing
+src/Notify.Functions/             single Function App project — every trigger lives here
+  Ingestion/                      Ingest HTTP function + handler + project lookup
+  Archive/                        archive EG-trigger + Cosmos sink
+  Devices/                        RegisterDevice HTTP function + NH installation
+  Push/                           push EG-trigger + NH sender + tag/payload helpers
+src/tests/Notify.*.Tests/         xUnit; Trait("Category","Integration") for integration
+src/tests/Notify.E2E/             post-deploy black-box tests, Trait("Category","E2E")
+infra/main.bicep                  cd-deploy template
+infra/modules/                    one bicep per Azure resource
 infra/modules/github-oidc.bicep   bootstrap-only — NOT in main.bicep
-app/Notify.xcodeproj/      Xcode project (open directly)
-docs/                      SCHEMA, DEPLOY, PROJECT-ONBOARDING
+app/Notify.xcodeproj/             Xcode project (open directly)
+docs/                             SCHEMA, DEPLOY, PROJECT-ONBOARDING
 ```
 
 ## Commands
@@ -50,6 +55,7 @@ docs/                      SCHEMA, DEPLOY, PROJECT-ONBOARDING
 - Don't add `AZURE_CREDENTIALS` JSON or any long-lived Azure secret. The pipeline is OIDC-only by design.
 - Don't switch the Function App back to Y1/Consumption — .NET 10 Linux only runs on FC1/Flex.
 - Don't add a deployment-slot resource to `functions.bicep` — Flex Consumption rejects slot creation.
+- Don't split `Notify.Functions` back into per-feature projects — one Function App = one zip = one project. The matrix that overwrote itself is gone for a reason (PR #46).
 
 ## Phase status
-Phase 0 + Phase 1 done (ingestion + archive deployed and green end-to-end on dev RG). Phase 2 next: push delivery (`Notify.PushDelivery`, `Notify.DeviceApi`, NH credential upload). Roadmap in `~/.claude/plans/what-s-next-keen-meadow.md`.
+Phase 0/1/2 backend done end-to-end on dev RG. Live triggers: `Ingest`, `archive`, `push`, `RegisterDevice`. EG subs: `sub-archive`, `sub-push` both Succeeded. **Phase 2 manual gap:** APNs `.p8` upload (`az notification-hub credential apns update …`) — required for actual on-device delivery, not for the test loop. **Phase 3 next:** mobile app (SwiftUI), per `~/.claude/plans/that-the-begining-of-validated-lecun.md` line 341.
