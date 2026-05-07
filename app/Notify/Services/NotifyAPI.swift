@@ -146,6 +146,44 @@ final class MockNotifyAPI: NotifyAPI {
         defer { pageCursor = min(pageCursor + 1, pages.count) }
         return pageCursor < pages.count ? pages[pageCursor] : InboxPage(items: [], continuationToken: nil)
     }
+
+    // Fixture used by AppContainer when the app is launched with
+    // -NotifyUITestMockBackend. IDs are stable so InboxFlowTests can locate
+    // `inbox.row.ui-test-1` on both iPhone and iPad destinations.
+    static func uiTestSeeded() -> MockNotifyAPI {
+        let mock = MockNotifyAPI()
+        mock.pages = [
+            InboxPage(items: [
+                InboxNotification(
+                    id: "ui-test-1",
+                    source: "home-pipeline",
+                    title: "Backup failed",
+                    body: "rsync exited 12 on pi-01",
+                    type: "alert",
+                    priority: .high,
+                    tags: ["pi-01"],
+                    deeplink: nil,
+                    deduplicationKey: nil,
+                    timestamp: Date(timeIntervalSince1970: 1_730_000_000),
+                    envelopeId: "ui-test-env-1"
+                ),
+                InboxNotification(
+                    id: "ui-test-2",
+                    source: "cron",
+                    title: "Weekly cleanup ok",
+                    body: "200 files removed",
+                    type: "info",
+                    priority: .normal,
+                    tags: nil,
+                    deeplink: nil,
+                    deduplicationKey: nil,
+                    timestamp: Date(timeIntervalSince1970: 1_730_001_000),
+                    envelopeId: "ui-test-env-2"
+                ),
+            ], continuationToken: nil),
+        ]
+        return mock
+    }
 }
 
 struct InboxCall: Equatable {

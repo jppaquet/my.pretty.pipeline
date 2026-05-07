@@ -14,6 +14,10 @@ struct InboxView: View {
                     ForEach(items) { item in
                         InboxRow(notification: item)
                             .tag(item.id)
+                            // Combine into a single accessibility element so
+                            // `inbox.row.<id>` lands on the cell itself, not a
+                            // descendant — XCUITest needs it on the cell.
+                            .accessibilityElement(children: .combine)
                             .accessibilityIdentifier("inbox.row.\(item.id)")
                     }
                     if continuation != nil {
