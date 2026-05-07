@@ -111,14 +111,30 @@ if touched 'app/**' ':(exclude)app/scripts/**' ':(exclude)app/.swiftlint.yml'; t
     # xcodebuild call exits non-zero — match the dotnet/bicep/swiftlint
     # pattern and warn-and-skip so contributors without Xcode aren't blocked.
     if xcrun --find xcodebuild >/dev/null 2>&1 && [[ "$(xcode-select -p 2>/dev/null)" != *"CommandLineTools"* ]]; then
-        xcodebuild test \
-            -project Notify.xcodeproj \
-            -scheme Notify \
-            -destination 'platform=iOS Simulator,name=iPhone 16' \
-            -resultBundlePath "/tmp/notify-prepush-$$.xcresult" \
-            CODE_SIGNING_ALLOWED=NO \
-            -quiet
-        rm -rf "/tmp/notify-prepush-$$.xcresult"
+        # Pick an available iPhone simulator. Prefer the base "iPhone 17"
+        # (non-Pro) because Pro simulators sometimes hang on test launches.
+        destination=$(xcrun simctl list devices available -j 2>/dev/null \
+            | python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+phones=[dev for runtime in d.get('devices',{}).values() for dev in runtime if dev.get('name','').startswith('iPhone') and dev.get('isAvailable')]
+# Prefer exact 'iPhone 17', fall back to first available
+pref=[p for p in phones if p.get('name')=='iPhone 17']
+chosen = pref[0] if pref else (phones[0] if phones else None)
+print('platform=iOS Simulator,id='+chosen['udid'] if chosen else '')
+" 2>/dev/null)
+        if [ -z "$destination" ]; then
+            echo "  ! no iPhone simulator available; skipping iOS tests" >&2
+        else
+            xcodebuild test \
+                -project Notify.xcodeproj \
+                -scheme Notify \
+                -destination "$destination" \
+                -resultBundlePath "/tmp/notify-prepush-$$.xcresult" \
+                CODE_SIGNING_ALLOWED=NO \
+                -quiet
+            rm -rf "/tmp/notify-prepush-$$.xcresult"
+        fi
     else
         echo "  ! xcodebuild unavailable (install Xcode + 'sudo xcode-select -s /Applications/Xcode.app'); skipping iOS tests" >&2
     fi

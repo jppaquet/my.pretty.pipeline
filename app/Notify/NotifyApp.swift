@@ -7,7 +7,7 @@ struct NotifyApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
+            RootView(container: AppContainer.shared)
         }
     }
 }
@@ -25,15 +25,28 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         _ application: UIApplication,
         didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
     ) {
-        let hex = deviceToken.map { String(format: "%02x", $0) }.joined()
-        // Phase 3 wires this to PushRegistration.register(apnsTokenHex:)
-        print("APNs token: \(hex)")
+        Task { @MainActor in
+            do {
+                try await AppContainer.shared.push.register(apnsToken: deviceToken)
+            } catch {
+                NSLog("PushRegistration.register failed: %@", String(describing: error))
+            }
+        }
     }
 
     func application(
         _ application: UIApplication,
         didFailToRegisterForRemoteNotificationsWithError error: Error
     ) {
-        print("APNs registration failed: \(error.localizedDescription)")
+        NSLog("APNs registration failed: %@", error.localizedDescription)
+    }
+
+    // Foreground delivery — show the system banner so the user can see it.
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound, .badge])
     }
 }

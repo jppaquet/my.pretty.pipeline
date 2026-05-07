@@ -7,10 +7,22 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0ABFAE7047C6969128CF3717 /* InboxNotification.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DB5753DB350C5079A045977 /* InboxNotification.swift */; };
+		0BC72CD07DB41C379B2A2119 /* InboxViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 699977EE24AE54ECC7813AA2 /* InboxViewModel.swift */; };
+		2B0E8B5B8D2361F5C355569D /* InboxViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4FA9B41297A7D4C6D12854D /* InboxViewModelTests.swift */; };
+		46187D374E11114C3573F4AD /* KeychainStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D71DC7935F2A95C9D838192 /* KeychainStoreTests.swift */; };
+		4E4DDD540D1588AF0A21FED6 /* NotifyAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 232DC4A73681CCD1BEA091AF /* NotifyAPI.swift */; };
+		66126393E25D006C3A604F36 /* InboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73732EDF45A7432F3728B493 /* InboxView.swift */; };
+		7CAB3BB4C49B2DB7C83CAD75 /* PushPayloadParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 668E4C3D4CD3F8014C92AF48 /* PushPayloadParserTests.swift */; };
+		7F41779FF5C408036F46EF9D /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 179CEA1636C24F60BB6DD7BA /* KeychainStore.swift */; };
+		8017EBF41BA0D0303A2DABD5 /* NotifyAPICodableTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F321D843CB72A4C3EC33F22 /* NotifyAPICodableTests.swift */; };
+		8CAC0C8B804AA983E4C9636A /* NotificationDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60831F704B520D6B292272D6 /* NotificationDetailView.swift */; };
 		9D086923D5FF98B6D6777328 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A77EB84E6138D18CF259FE92 /* RootView.swift */; };
 		D72B9FD6F17A00E4EAC5EDA6 /* NotifyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD5DCFE552797D390A02209F /* NotifyApp.swift */; };
+		E8DA9F3501AE40D952F5D056 /* PushRegistration.swift in Sources */ = {isa = PBXBuildFile; fileRef = B14F7A1531FD9BB0DB1BB3BA /* PushRegistration.swift */; };
+		EADE2E9AE07F8CC5F17CD34F /* DeviceRegistration.swift in Sources */ = {isa = PBXBuildFile; fileRef = D68997227F497C102793DE05 /* DeviceRegistration.swift */; };
 		EE89978EC81926FF8D0872B7 /* InboxFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F1F24958CC7920D0255D9C2 /* InboxFlowTests.swift */; };
-		FB2B83115BDD2BFDF717BD43 /* SmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E69039CC816FDF49E61A3310 /* SmokeTests.swift */; };
+		FC3CF4BBA2E756A31287713F /* AppContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D23F0E6DC6168C0AACCA5B02 /* AppContainer.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -32,13 +44,25 @@
 
 /* Begin PBXFileReference section */
 		0F1F24958CC7920D0255D9C2 /* InboxFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxFlowTests.swift; sourceTree = "<group>"; };
+		179CEA1636C24F60BB6DD7BA /* KeychainStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
+		232DC4A73681CCD1BEA091AF /* NotifyAPI.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotifyAPI.swift; sourceTree = "<group>"; };
+		2F321D843CB72A4C3EC33F22 /* NotifyAPICodableTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotifyAPICodableTests.swift; sourceTree = "<group>"; };
 		3E6BBAB6F54CF9870B7428F3 /* NotifyTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = NotifyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		60831F704B520D6B292272D6 /* NotificationDetailView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotificationDetailView.swift; sourceTree = "<group>"; };
+		668E4C3D4CD3F8014C92AF48 /* PushPayloadParserTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PushPayloadParserTests.swift; sourceTree = "<group>"; };
+		699977EE24AE54ECC7813AA2 /* InboxViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = InboxViewModel.swift; sourceTree = "<group>"; };
+		6DB5753DB350C5079A045977 /* InboxNotification.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = InboxNotification.swift; sourceTree = "<group>"; };
+		73732EDF45A7432F3728B493 /* InboxView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = InboxView.swift; sourceTree = "<group>"; };
+		7D71DC7935F2A95C9D838192 /* KeychainStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = KeychainStoreTests.swift; sourceTree = "<group>"; };
 		A45A127077D654BF5F7156E3 /* NotifyUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = NotifyUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A77EB84E6138D18CF259FE92 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		B14F7A1531FD9BB0DB1BB3BA /* PushRegistration.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PushRegistration.swift; sourceTree = "<group>"; };
 		BD5DCFE552797D390A02209F /* NotifyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotifyApp.swift; sourceTree = "<group>"; };
 		C4B297C0F94687AC3521C427 /* Notify.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Notify.entitlements; sourceTree = "<group>"; };
+		C4FA9B41297A7D4C6D12854D /* InboxViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = InboxViewModelTests.swift; sourceTree = "<group>"; };
+		D23F0E6DC6168C0AACCA5B02 /* AppContainer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppContainer.swift; sourceTree = "<group>"; };
+		D68997227F497C102793DE05 /* DeviceRegistration.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DeviceRegistration.swift; sourceTree = "<group>"; };
 		E010CB5A3D3B243781800C5B /* Notify.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Notify.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		E69039CC816FDF49E61A3310 /* SmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmokeTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -65,8 +89,33 @@
 				BD5DCFE552797D390A02209F /* NotifyApp.swift */,
 				CF8EBFA72C093EBDF0E79B13 /* Features */,
 				03BD70D6954B8EE142A4CEAE /* Navigation */,
+				6101B555D8A08128C8BA156E /* Models */,
+				35C8A07FC3ED69426F57953E /* Services */,
+				D23F0E6DC6168C0AACCA5B02 /* AppContainer.swift */,
 			);
 			path = Notify;
+			sourceTree = "<group>";
+		};
+		3359DF727E8FFCBD8790A2B9 /* Inbox */ = {
+			isa = PBXGroup;
+			children = (
+				699977EE24AE54ECC7813AA2 /* InboxViewModel.swift */,
+				73732EDF45A7432F3728B493 /* InboxView.swift */,
+				60831F704B520D6B292272D6 /* NotificationDetailView.swift */,
+			);
+			name = Inbox;
+			path = Inbox;
+			sourceTree = "<group>";
+		};
+		35C8A07FC3ED69426F57953E /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				179CEA1636C24F60BB6DD7BA /* KeychainStore.swift */,
+				232DC4A73681CCD1BEA091AF /* NotifyAPI.swift */,
+				B14F7A1531FD9BB0DB1BB3BA /* PushRegistration.swift */,
+			);
+			name = Services;
+			path = Services;
 			sourceTree = "<group>";
 		};
 		4ADBAD05B436C2FD18F98142 = {
@@ -79,10 +128,23 @@
 			);
 			sourceTree = "<group>";
 		};
+		6101B555D8A08128C8BA156E /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				6DB5753DB350C5079A045977 /* InboxNotification.swift */,
+				D68997227F497C102793DE05 /* DeviceRegistration.swift */,
+			);
+			name = Models;
+			path = Models;
+			sourceTree = "<group>";
+		};
 		889679B9E73A90DBEBE1D8CD /* NotifyTests */ = {
 			isa = PBXGroup;
 			children = (
-				E69039CC816FDF49E61A3310 /* SmokeTests.swift */,
+				C4FA9B41297A7D4C6D12854D /* InboxViewModelTests.swift */,
+				2F321D843CB72A4C3EC33F22 /* NotifyAPICodableTests.swift */,
+				7D71DC7935F2A95C9D838192 /* KeychainStoreTests.swift */,
+				668E4C3D4CD3F8014C92AF48 /* PushPayloadParserTests.swift */,
 			);
 			path = NotifyTests;
 			sourceTree = "<group>";
@@ -100,6 +162,7 @@
 		CF8EBFA72C093EBDF0E79B13 /* Features */ = {
 			isa = PBXGroup;
 			children = (
+				3359DF727E8FFCBD8790A2B9 /* Inbox */,
 			);
 			path = Features;
 			sourceTree = "<group>";
@@ -119,8 +182,6 @@
 				3D0F9E3DFF984F10C2E97B39 /* PBXTargetDependency */,
 			);
 			name = NotifyUITests;
-			packageProductDependencies = (
-			);
 			productName = NotifyUITests;
 			productReference = A45A127077D654BF5F7156E3 /* NotifyUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
@@ -137,8 +198,6 @@
 				908D2266CA5B8BAECC05E5E5 /* PBXTargetDependency */,
 			);
 			name = NotifyTests;
-			packageProductDependencies = (
-			);
 			productName = NotifyTests;
 			productReference = 3E6BBAB6F54CF9870B7428F3 /* NotifyTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -154,8 +213,6 @@
 			dependencies = (
 			);
 			name = Notify;
-			packageProductDependencies = (
-			);
 			productName = Notify;
 			productReference = E010CB5A3D3B243781800C5B /* Notify.app */;
 			productType = "com.apple.product-type.application";
@@ -213,6 +270,15 @@
 			files = (
 				D72B9FD6F17A00E4EAC5EDA6 /* NotifyApp.swift in Sources */,
 				9D086923D5FF98B6D6777328 /* RootView.swift in Sources */,
+				0ABFAE7047C6969128CF3717 /* InboxNotification.swift in Sources */,
+				EADE2E9AE07F8CC5F17CD34F /* DeviceRegistration.swift in Sources */,
+				7F41779FF5C408036F46EF9D /* KeychainStore.swift in Sources */,
+				4E4DDD540D1588AF0A21FED6 /* NotifyAPI.swift in Sources */,
+				E8DA9F3501AE40D952F5D056 /* PushRegistration.swift in Sources */,
+				0BC72CD07DB41C379B2A2119 /* InboxViewModel.swift in Sources */,
+				66126393E25D006C3A604F36 /* InboxView.swift in Sources */,
+				8CAC0C8B804AA983E4C9636A /* NotificationDetailView.swift in Sources */,
+				FC3CF4BBA2E756A31287713F /* AppContainer.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -220,7 +286,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				FB2B83115BDD2BFDF717BD43 /* SmokeTests.swift in Sources */,
+				2B0E8B5B8D2361F5C355569D /* InboxViewModelTests.swift in Sources */,
+				8017EBF41BA0D0303A2DABD5 /* NotifyAPICodableTests.swift in Sources */,
+				46187D374E11114C3573F4AD /* KeychainStoreTests.swift in Sources */,
+				7CAB3BB4C49B2DB7C83CAD75 /* PushPayloadParserTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
