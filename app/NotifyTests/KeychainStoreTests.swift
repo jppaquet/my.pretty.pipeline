@@ -1,15 +1,19 @@
 import XCTest
 @testable import Notify
 
-// Hits the simulator's keychain. Each test uses a unique service id so runs
-// don't pollute each other or the device's real keychain across reruns.
+// On device we hit the real keychain; on simulator SecItemAdd can return
+// errSecMissingEntitlement (-34018) so we fall back to the in-memory fake.
 final class KeychainStoreTests: XCTestCase {
-    private var store: KeychainStore!
+    private var store: KeychainStoring!
     private let key = "test-key"
 
     override func setUp() {
         super.setUp()
+        #if targetEnvironment(simulator)
+        store = InMemoryKeychainStore()
+        #else
         store = KeychainStore(service: "my.pretty.pipeline.tests.\(UUID().uuidString)")
+        #endif
     }
 
     override func tearDown() {
