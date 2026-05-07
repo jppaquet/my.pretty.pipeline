@@ -1,11 +1,10 @@
 using System.Text;
 using System.Text.Json;
 using Microsoft.Azure.NotificationHubs;
-using Notify.DeviceApi;
-using Notify.DeviceApi.Devices;
+using Notify.Functions.Devices;
 using Notify.Shared.Json;
 
-namespace Notify.DeviceApi.Tests;
+namespace Notify.Functions.Devices.Tests;
 
 public class RegisterHandlerTests
 {
@@ -32,7 +31,7 @@ public class RegisterHandlerTests
     public async Task Oversized_payload_returns_413_without_parsing_body()
     {
         var (handler, _) = NewHandler();
-        var result = await handler.HandleAsync(Stream.Null, contentLength: DeviceApiOptions.MaxRequestBodyBytes + 1);
+        var result = await handler.HandleAsync(Stream.Null, contentLength: DevicesOptions.MaxRequestBodyBytes + 1);
         Assert.IsType<RegisterResult.PayloadTooLarge>(result);
     }
 

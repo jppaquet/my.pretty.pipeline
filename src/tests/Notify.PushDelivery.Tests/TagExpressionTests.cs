@@ -1,6 +1,6 @@
-using Notify.PushDelivery.Push;
+using Notify.Functions.Push;
 
-namespace Notify.PushDelivery.Tests;
+namespace Notify.Functions.Push.Tests;
 
 public class TagExpressionTests
 {

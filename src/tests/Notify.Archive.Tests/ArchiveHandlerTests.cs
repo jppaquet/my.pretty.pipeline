@@ -1,9 +1,9 @@
-using Notify.Archive.Archiving;
+using Notify.Functions.Archive;
 using Notify.Shared;
 using Notify.Shared.CloudEvents;
 using Notify.Shared.Hashing;
 
-namespace Notify.Archive.Tests;
+namespace Notify.Functions.Archive.Tests;
 
 public class ArchiveHandlerTests
 {

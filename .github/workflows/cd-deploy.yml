@@ -68,19 +68,13 @@ jobs:
           echo "functionAppName=${NAME:-}" >> "$GITHUB_OUTPUT"
           echo "functionAppHostname=${HOST:-}" >> "$GITHUB_OUTPUT"
 
+  # Single Function App, single project (Notify.Functions). Earlier matrix
+  # publishes overwrote each other on Flex (one zip per Function App), so we
+  # collapsed to one project that contains every trigger.
   publish-functions:
     needs: deploy-infra
     if: needs.deploy-infra.outputs.function_app_name != ''
     runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix:
-        project:
-          - Notify.IngestionApi
-          - Notify.PushDelivery
-          - Notify.Archive
-          - Notify.InboxApi
-          - Notify.DeviceApi
     steps:
       - uses: actions/checkout@v6
 
@@ -89,38 +83,52 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Skip if project does not exist yet (Phase 0)
-        id: gate
-        run: |
-          if [ -d "src/${{ matrix.project }}" ]; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Azure login (OIDC)
-        if: steps.gate.outputs.exists == 'true'
         uses: azure/login@v3
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Build ${{ matrix.project }}
-        if: steps.gate.outputs.exists == 'true'
+      - name: Build Notify.Functions
         run: |
           set -eo pipefail
-          dotnet publish "src/${{ matrix.project }}/${{ matrix.project }}.csproj" \
+          dotnet publish src/Notify.Functions/Notify.Functions.csproj \
             -c Release -o ./publish
 
       # Azure/functions-action handles Flex Consumption deployment correctly
       # via Run-From-Package + storage SAS.
-      - name: Publish ${{ matrix.project }}
-        if: steps.gate.outputs.exists == 'true'
+      - name: Publish to Function App
         uses: Azure/functions-action@v1
         with:
           app-name: ${{ needs.deploy-infra.outputs.function_app_name }}
           package: ./publish
+
+      # Flex registers triggers asynchronously after publish-action returns.
+      # ARM's EG-sub validation in pass 2 needs to see push/archive/Ingest
+      # functions on the app — wait for the host to surface them.
+      - name: Wait for triggers to register
+        run: |
+          set -eo pipefail
+          subId=$(az account show --query id -o tsv)
+          rg='${{ vars.AZURE_RG_DEV }}'
+          name='${{ needs.deploy-infra.outputs.function_app_name }}'
+          # Force the host to re-sync triggers, then poll until our two EG
+          # triggers (archive, push) appear. Cap at ~3 min.
+          az rest --method post \
+            --url "https://management.azure.com/subscriptions/${subId}/resourceGroups/${rg}/providers/Microsoft.Web/sites/${name}/syncfunctiontriggers?api-version=2023-12-01" \
+            >/dev/null 2>&1 || true
+          for i in $(seq 1 36); do
+            list=$(az rest --method get \
+              --url "https://management.azure.com/subscriptions/${subId}/resourceGroups/${rg}/providers/Microsoft.Web/sites/${name}/functions?api-version=2023-12-01" \
+              --query 'value[].name' -o tsv 2>/dev/null || echo '')
+            echo "attempt ${i}: ${list}"
+            if echo "$list" | grep -q '/archive$' && echo "$list" | grep -q '/push$'; then
+              echo "archive + push registered"; exit 0
+            fi
+            sleep 5
+          done
+          echo "::warning::archive/push not visible after 3 min — pass 2 may fail"
 
   # Pass 2: re-deploy infra with EG subs enabled now that the function endpoints
   # are registered. Skipped when neither archive nor push project exists yet.

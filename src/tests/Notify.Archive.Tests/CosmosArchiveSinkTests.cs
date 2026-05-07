@@ -1,10 +1,10 @@
 using Microsoft.Azure.Cosmos;
-using Notify.Archive.Archiving;
+using Notify.Functions.Archive;
 using Notify.Shared.CloudEvents;
 using Notify.Shared.Cosmos;
 using Notify.Shared.Hashing;
 
-namespace Notify.Archive.Tests;
+namespace Notify.Functions.Archive.Tests;
 
 [Trait("Category", "Integration")]
 public class CosmosArchiveSinkTests : IClassFixture<CosmosEmulatorFixture>

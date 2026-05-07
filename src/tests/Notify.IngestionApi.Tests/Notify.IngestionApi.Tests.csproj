@@ -19,7 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Notify.IngestionApi\Notify.IngestionApi.csproj" />
+    <ProjectReference Include="..\..\Notify.Functions\Notify.Functions.csproj" />
   </ItemGroup>
 
 </Project>

@@ -1,7 +1,7 @@
 using Microsoft.Azure.Cosmos;
 using Notify.Shared.Json;
 
-namespace Notify.Archive.Tests;
+namespace Notify.Functions.Archive.Tests;
 
 // Spins up a per-test-class Cosmos database+container against the local
 // emulator (CI: docker-service container; dev: `docker compose up -d`).

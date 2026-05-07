@@ -1,9 +1,8 @@
-using Notify.IngestionApi;
-using Notify.IngestionApi.Ingestion;
+using Notify.Functions.Ingestion;
 using Notify.Shared.CloudEvents;
 using Notify.Shared.Cosmos;
 
-namespace Notify.IngestionApi.Tests;
+namespace Notify.Functions.Ingestion.Tests;
 
 internal sealed class InMemoryProjectLookup : IProjectLookup
 {
