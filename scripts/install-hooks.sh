@@ -42,6 +42,9 @@ command -v gitleaks  >/dev/null 2>&1 || missing+=("gitleaks (brew install gitlea
 command -v dotnet    >/dev/null 2>&1 || missing+=("dotnet (https://dotnet.microsoft.com/download)")
 command -v bicep     >/dev/null 2>&1 || command -v az >/dev/null 2>&1 || missing+=("bicep or az (brew install azure-cli)")
 command -v swiftlint >/dev/null 2>&1 || missing+=("swiftlint (brew install swiftlint)")
+{ xcrun --find xcodebuild >/dev/null 2>&1 \
+    && [[ "$(xcode-select -p 2>/dev/null)" != *"CommandLineTools"* ]]; } \
+    || missing+=("Xcode (Mac App Store, then 'sudo xcode-select -s /Applications/Xcode.app')")
 
 if [ "${#missing[@]}" -gt 0 ]; then
     echo

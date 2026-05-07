@@ -106,14 +106,22 @@ if touched 'app/**' ':(exclude)app/scripts/**' ':(exclude)app/.swiftlint.yml'; t
     else
         echo "  ! swiftlint not installed (brew install swiftlint); skipping lint" >&2
     fi
-    xcodebuild test \
-        -project Notify.xcodeproj \
-        -scheme Notify \
-        -destination 'platform=iOS Simulator,name=iPhone 16' \
-        -resultBundlePath "/tmp/notify-prepush-$$.xcresult" \
-        CODE_SIGNING_ALLOWED=NO \
-        -quiet
-    rm -rf "/tmp/notify-prepush-$$.xcresult"
+    # `xcodebuild` ships with Xcode (not the Command Line Tools alone). When
+    # only CLT is installed, `xcode-select -p` returns the CLT path and any
+    # xcodebuild call exits non-zero — match the dotnet/bicep/swiftlint
+    # pattern and warn-and-skip so contributors without Xcode aren't blocked.
+    if xcrun --find xcodebuild >/dev/null 2>&1 && [[ "$(xcode-select -p 2>/dev/null)" != *"CommandLineTools"* ]]; then
+        xcodebuild test \
+            -project Notify.xcodeproj \
+            -scheme Notify \
+            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            -resultBundlePath "/tmp/notify-prepush-$$.xcresult" \
+            CODE_SIGNING_ALLOWED=NO \
+            -quiet
+        rm -rf "/tmp/notify-prepush-$$.xcresult"
+    else
+        echo "  ! xcodebuild unavailable (install Xcode + 'sudo xcode-select -s /Applications/Xcode.app'); skipping iOS tests" >&2
+    fi
     cd "$REPO"
 fi
 
