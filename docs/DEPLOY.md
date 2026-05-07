@@ -37,11 +37,11 @@ subscription.
 
 ## Day-2 deploys (CI)
 
-Every `git push` to `main` runs `cd-deploy.yml`. It's a five-stage pipeline:
+Every `git push` to `main` runs `cd-deploy.yml`. It's a four-stage pipeline:
 
-1. **deploy-infra (pass 1)** — `infra/main.bicep` with `enableArchiveSubscription=false`. Creates the Function App + storage + KV + Cosmos + EG topic. EG subscriptions are *not* created yet because ARM validates each subscription's destination function exists before allowing the deployment, and the function code only ships in step 2.
-2. **publish-functions** — builds and deploys each `Notify.*` Function project via `Azure/functions-action@v1`. Skips projects that don't exist yet (Phase 0/1).
-3. **enable-eventgrid-subs (pass 2)** — re-runs `main.bicep` with the matching EG-sub flags true. ARM now sees the function endpoints and the subscriptions provision cleanly. Skipped when no Phase-1+ project (`Notify.Archive`, `Notify.PushDelivery`) is in the tree.
+1. **deploy-infra (pass 1)** — `infra/main.bicep` with `enableArchiveSubscription=false`. Creates the Function App + storage + KV + Cosmos + EG topic + NH. EG subscriptions are *not* created yet because ARM validates each subscription's destination function exists before allowing the deployment, and the function code only ships in step 2.
+2. **publish-functions** — builds the single `Notify.Functions` project (which contains every trigger) and deploys via `Azure/functions-action@v1`. Then waits up to ~3 min for the Flex host to register the triggers (Flex registers asynchronously after publish returns).
+3. **enable-eventgrid-subs (pass 2)** — re-runs `main.bicep` with the matching EG-sub flags `true`. ARM now sees the registered function endpoints and the subscriptions provision cleanly. Skipped if neither `ArchiveFunction.cs` nor `PushFunction.cs` exists under `src/Notify.Functions/`.
 4. **e2e** — runs `tests/Notify.E2E` against the deployed app.
 
 Flex Consumption has **no deployment slots**, so there's no staging/production
@@ -69,6 +69,12 @@ before flipping the flag.
 - **SKU changes between Dynamic and FlexConsumption are not supported.** ARM
   rejects the in-place update; you must delete the existing Function App and
   App Service Plan before redeploying with the new SKU.
+- **One zip per Function App.** Earlier we shipped four Function projects
+  through a 5-way matrix in `cd-deploy`. Each `Azure/functions-action` upload
+  set Flex's deployment-storage blob to its own zip; whichever finished last
+  won and the other triggers vanished. Fix: collapse triggers into a single
+  project (PR #46). If you ever bring back per-feature isolation, do it as
+  separate **Function Apps**, not separate projects deploying to the same app.
 
 ## TestFlight (Phase 3)
 

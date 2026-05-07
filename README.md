@@ -38,7 +38,7 @@ Fits inside free tiers. Target monthly bill: under a coffee.
 
 ## Status
 
-Phase 1 done (ingestion + archive). Phase 2 next (push delivery + iOS subscribe).
+Phase 2 backend done (ingestion + archive + push fan-out + device registration). APNs `.p8` upload + iOS app are the remaining gates to actual on-device push.
 
 ## Local dev
 
