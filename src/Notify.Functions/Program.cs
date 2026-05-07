@@ -8,6 +8,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Notify.Functions.Archive;
 using Notify.Functions.Devices;
+using Notify.Functions.Inbox;
 using Notify.Functions.Ingestion;
 using Notify.Functions.Push;
 using Notify.Shared.Hashing;
@@ -26,6 +27,7 @@ var host = new HostBuilder()
         services.AddOptions<ArchiveOptions>().Bind(ctx.Configuration);
         services.AddOptions<DevicesOptions>().Bind(ctx.Configuration);
         services.AddOptions<PushOptions>().Bind(ctx.Configuration);
+        services.AddOptions<InboxOptions>().Bind(ctx.Configuration);
 
         // Single CosmosClient — both Ingestion (project lookup) and Archive
         // (notifications upsert) share it. Endpoint comes from IngestionOptions
@@ -68,6 +70,15 @@ var host = new HostBuilder()
             return new CosmosArchiveSink(cosmos.GetContainer(opts.CosmosDatabase, opts.CosmosNotificationsContainer));
         });
         services.AddSingleton<ArchiveHandler>();
+
+        // ── Inbox ────────────────────────────────────────────────────────
+        services.AddSingleton<IInboxQuery>(sp =>
+        {
+            var opts = sp.GetRequiredService<IOptions<InboxOptions>>().Value;
+            var cosmos = sp.GetRequiredService<CosmosClient>();
+            return new CosmosInboxQuery(cosmos.GetContainer(opts.CosmosDatabase, opts.CosmosNotificationsContainer));
+        });
+        services.AddSingleton<InboxHandler>();
 
         // ── Notification Hubs (Devices + Push share the client) ─────────
         services.AddSingleton(sp =>

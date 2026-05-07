@@ -16,6 +16,7 @@ namespace Notify.E2E;
 //   E2E_API_KEY                   x-api-key for an existing CI-only project
 //   E2E_PROJECT_ID                source/project id matching that key
 //   E2E_COSMOS_ACCOUNT_ENDPOINT   https://<acct>.documents.azure.com:443/
+//   E2E_FUNCTION_KEY              Function App per-function key (Inbox test only)
 //
 // Without these the SkippableFact skips with a clear reason — preferable to a
 // silent pass. The CI-only API key minting will land in a follow-up PR.
@@ -82,4 +83,55 @@ public class PipelineTests
 
         Assert.Fail($"Document {expectedId} not visible in Cosmos within {Deadline.TotalSeconds}s");
     }
+
+    [SkippableFact]
+    public async Task Posted_message_appears_in_inbox_within_5s()
+    {
+        var hostname    = Environment.GetEnvironmentVariable("E2E_TARGET_HOSTNAME");
+        var apiKey      = Environment.GetEnvironmentVariable("E2E_API_KEY");
+        var project     = Environment.GetEnvironmentVariable("E2E_PROJECT_ID");
+        var functionKey = Environment.GetEnvironmentVariable("E2E_FUNCTION_KEY");
+
+        Skip.If(string.IsNullOrWhiteSpace(hostname),    "E2E_TARGET_HOSTNAME not set");
+        Skip.If(string.IsNullOrWhiteSpace(apiKey),      "E2E_API_KEY not set");
+        Skip.If(string.IsNullOrWhiteSpace(project),     "E2E_PROJECT_ID not set");
+        Skip.If(string.IsNullOrWhiteSpace(functionKey), "E2E_FUNCTION_KEY not set");
+
+        var baseUri = hostname!.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+            ? new Uri(hostname)
+            : new Uri($"https://{hostname}");
+
+        var dedup = $"e2e-inbox-{Guid.NewGuid():N}";
+        var expectedId = Notify.Shared.Hashing.DedupKeyHasher.Hash(project!, dedup);
+
+        using var http = new HttpClient { BaseAddress = baseUri };
+        http.DefaultRequestHeaders.Add("x-api-key", apiKey);
+
+        var post = await http.PostAsJsonAsync("/v1/notifications", new
+        {
+            source = project,
+            title = "e2e-inbox",
+            body = "inbox check",
+            deduplicationKey = dedup,
+        }, NotifyJson.Options);
+        Assert.Equal(HttpStatusCode.Accepted, post.StatusCode);
+
+        var inboxUrl = $"/v1/inbox?source={Uri.EscapeDataString(project!)}&limit=50&code={Uri.EscapeDataString(functionKey!)}";
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        while (sw.Elapsed < Deadline)
+        {
+            var get = await http.GetAsync(inboxUrl);
+            if (get.IsSuccessStatusCode)
+            {
+                var page = await get.Content.ReadFromJsonAsync<InboxPageResponse>(NotifyJson.Options);
+                if (page?.Items.Any(d => d.Id == expectedId) == true)
+                    return;
+            }
+            await Task.Delay(250);
+        }
+
+        Assert.Fail($"Document {expectedId} not visible in /v1/inbox within {Deadline.TotalSeconds}s");
+    }
+
+    private sealed record InboxPageResponse(IReadOnlyList<NotificationDocument> Items, string? ContinuationToken);
 }
