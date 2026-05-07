@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   archive-and-upload:
@@ -21,6 +21,9 @@ jobs:
       APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
       APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
       MARKETING_VERSION: ${{ github.ref_name }}
+      # github.run_number is monotonic per workflow, which is what TestFlight
+      # needs in CFBundleVersion (re-uploading the same number is rejected).
+      BUILD_NUMBER: ${{ github.run_number }}
 
     steps:
       - uses: actions/checkout@v6
@@ -30,8 +33,9 @@ jobs:
 
       - name: Write App Store Connect API key
         run: |
-          mkdir -p ~/.appstoreconnect/private_keys
-          echo "$APP_STORE_CONNECT_API_KEY_P8" > "~/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8"
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          # `~` doesn't expand inside double quotes; use $HOME explicitly.
+          echo "$APP_STORE_CONNECT_API_KEY_P8" > "$HOME/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8"
 
       - name: Archive
         run: |
@@ -48,6 +52,7 @@ jobs:
             -authenticationKeyID "$APP_STORE_CONNECT_API_KEY_ID" \
             -authenticationKeyIssuerID "$APP_STORE_CONNECT_API_ISSUER_ID" \
             MARKETING_VERSION="$VER" \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
             | xcpretty
 
       - name: Export IPA
@@ -69,3 +74,17 @@ jobs:
             -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8" \
             -authenticationKeyID "$APP_STORE_CONNECT_API_KEY_ID" \
             -authenticationKeyIssuerID "$APP_STORE_CONNECT_API_ISSUER_ID"
+
+      - name: Publish GitHub release with build number
+        # Lands the TestFlight build number on the release notes so the tag
+        # → build mapping is recoverable without opening App Store Connect.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        working-directory: ${{ github.workspace }}
+        run: |
+          NOTES="TestFlight build ${BUILD_NUMBER} uploaded for ${MARKETING_VERSION}."
+          if gh release view "$MARKETING_VERSION" >/dev/null 2>&1; then
+            gh release edit "$MARKETING_VERSION" --notes "$NOTES"
+          else
+            gh release create "$MARKETING_VERSION" --title "$MARKETING_VERSION" --notes "$NOTES"
+          fi

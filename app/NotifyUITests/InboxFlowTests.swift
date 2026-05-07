@@ -2,22 +2,29 @@ import XCTest
 
 // Same test, two destinations — the CI matrix runs this on iPhone 16 *and*
 // iPad Pro 13" so a NavigationSplitView regression breaks the build on
-// whichever idiom regressed.
+// whichever idiom regressed. Compact pushes the detail; regular reveals it
+// in the right pane. Either way `notification.detail` becomes hittable.
 final class InboxFlowTests: XCTestCase {
-    func testAppLaunchesAndShowsInbox() throws {
+    func testTappingRowShowsDetail() throws {
         let app = XCUIApplication()
-        // The launch arg flips AppContainer to its mock-API path so the UI test
-        // is hermetic — see AppContainer.makeDefault for the override hook
-        // (`-NotifyUITestMockBackend`). When that hook lands the smoke test
-        // becomes a real flow test; for now it exercises launch + sidebar.
         app.launchArguments.append("-NotifyUITestMockBackend")
         app.launch()
 
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
-        // Sidebar list always present in both compact (iPhone) and regular (iPad)
-        // size classes — `inbox.list` is the accessibilityIdentifier on InboxView.
-        // Under the hood SwiftUI List is a CollectionView on this OS version.
+
         let inbox = app.collectionViews["inbox.list"]
         XCTAssertTrue(inbox.waitForExistence(timeout: 5))
+
+        // SwiftUI List on iOS 18+ doesn't promote `accessibilityIdentifier`
+        // onto the cell itself — the identifier lands on a descendant, so we
+        // match any descendant carrying it and tap that.
+        let row = app.descendants(matching: .any)
+            .matching(identifier: "inbox.row.ui-test-1")
+            .firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "Seeded row not found")
+        row.tap()
+
+        let detail = app.scrollViews["notification.detail"]
+        XCTAssertTrue(detail.waitForExistence(timeout: 5), "Detail not shown after tap")
     }
 }

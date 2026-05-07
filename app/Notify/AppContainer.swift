@@ -24,9 +24,11 @@ final class AppContainer {
     static func makeDefault() -> AppContainer {
         let keychain = KeychainStore()
 
-        // UI tests run hermetically against a mock backend.
+        // UI tests run hermetically against a mock backend pre-seeded with
+        // stable IDs so XCUITest can locate `inbox.row.ui-test-1` on both
+        // iPhone (compact) and iPad (regular) destinations.
         if ProcessInfo.processInfo.arguments.contains("-NotifyUITestMockBackend") {
-            return AppContainer(api: MockNotifyAPI(), keychain: keychain)
+            return AppContainer(api: MockNotifyAPI.uiTestSeeded(), keychain: keychain)
         }
 
         let plistURL = Bundle.main.object(forInfoDictionaryKey: "NotifyAPIBaseURL") as? String

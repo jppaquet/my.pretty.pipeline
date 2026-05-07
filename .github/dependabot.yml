@@ -14,11 +14,13 @@ updates:
   - package-ecosystem: "nuget"
     directories:
       - "/src/Notify.Shared"
-      - "/src/Notify.IngestionApi"
-      - "/src/Notify.Archive"
+      - "/src/Notify.Functions"
       - "/src/tests/Notify.Shared.Tests"
       - "/src/tests/Notify.IngestionApi.Tests"
       - "/src/tests/Notify.Archive.Tests"
+      - "/src/tests/Notify.Inbox.Tests"
+      - "/src/tests/Notify.DeviceApi.Tests"
+      - "/src/tests/Notify.PushDelivery.Tests"
       - "/src/tests/Notify.E2E"
     schedule:
       interval: "daily"
