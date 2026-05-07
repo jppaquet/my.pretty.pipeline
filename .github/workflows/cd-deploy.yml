@@ -33,13 +33,18 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Compute EG-sub flags from project presence
+      - name: Compute EG-sub flags from feature-folder presence
         id: flags
         run: |
+          # After the refactor in PR #46 every trigger lives under
+          # src/Notify.Functions/<feature>/. Probe the matching folder for
+          # an EG-trigger source file (the *Function.cs convention) so this
+          # gate auto-flips when a future Phase 2/4 consumer ships its
+          # trigger but stays inert until then.
           archive=false
           push=false
-          [ -d "src/Notify.Archive" ] && archive=true
-          [ -d "src/Notify.PushDelivery" ] && push=true
+          [ -f "src/Notify.Functions/Archive/ArchiveFunction.cs" ] && archive=true
+          [ -f "src/Notify.Functions/Push/PushFunction.cs" ] && push=true
           echo "archive=${archive}" >> "$GITHUB_OUTPUT"
           echo "push=${push}" >> "$GITHUB_OUTPUT"
 
