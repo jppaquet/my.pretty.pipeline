@@ -131,7 +131,7 @@ final class MockNotifyAPI: NotifyAPI {
     var registerError: Error?
     var inboxError: Error?
     private(set) var registerCalls: [DeviceRegistration] = []
-    private(set) var inboxCalls: [(source: String?, limit: Int, token: String?)] = []
+    private(set) var inboxCalls: [InboxCall] = []
     private var pageCursor = 0
 
     func registerDevice(_ registration: DeviceRegistration) async throws -> DeviceRegistrationResponse {
@@ -141,9 +141,15 @@ final class MockNotifyAPI: NotifyAPI {
     }
 
     func inbox(source: String?, limit: Int, continuationToken: String?) async throws -> InboxPage {
-        inboxCalls.append((source, limit, continuationToken))
+        inboxCalls.append(InboxCall(source: source, limit: limit, token: continuationToken))
         if let inboxError { throw inboxError }
         defer { pageCursor = min(pageCursor + 1, pages.count) }
         return pageCursor < pages.count ? pages[pageCursor] : InboxPage(items: [], continuationToken: nil)
     }
+}
+
+struct InboxCall: Equatable {
+    let source: String?
+    let limit: Int
+    let token: String?
 }

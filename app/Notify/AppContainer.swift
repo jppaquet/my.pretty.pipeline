@@ -30,8 +30,10 @@ final class AppContainer {
         }
 
         let plistURL = Bundle.main.object(forInfoDictionaryKey: "NotifyAPIBaseURL") as? String
+        // swiftlint:disable force_unwrapping
         let baseURL = (plistURL.flatMap(URL.init(string:)))
-            ?? URL(string: "https://func-notify.invalid")!  // sentinel — surfaces in failed-load state
+            ?? URL(string: "https://func-notify.invalid")!  // sentinel — always valid literal
+        // swiftlint:enable force_unwrapping
 
         let plistKey = Bundle.main.object(forInfoDictionaryKey: "NotifyFunctionKey") as? String
         let functionKey = keychain.load(forKey: KeychainKey.functionKey) ?? plistKey ?? ""
