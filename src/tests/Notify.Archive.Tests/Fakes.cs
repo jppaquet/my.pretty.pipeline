@@ -1,7 +1,7 @@
-using Notify.Archive.Archiving;
+using Notify.Functions.Archive;
 using Notify.Shared.Cosmos;
 
-namespace Notify.Archive.Tests;
+namespace Notify.Functions.Archive.Tests;
 
 internal sealed class InMemoryArchiveSink : IArchiveSink
 {

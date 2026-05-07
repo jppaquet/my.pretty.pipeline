@@ -48,3 +48,4 @@ fastlane/test_output/
 .env
 .env.*
 !.env.example
+my.pretty.pipeline.code-workspace

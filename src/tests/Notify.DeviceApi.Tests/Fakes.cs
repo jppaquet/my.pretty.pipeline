@@ -1,7 +1,7 @@
 using Microsoft.Azure.NotificationHubs;
-using Notify.DeviceApi;
+using Notify.Functions.Devices;
 
-namespace Notify.DeviceApi.Tests;
+namespace Notify.Functions.Devices.Tests;
 
 internal sealed class RecordingHub : INotificationHub
 {

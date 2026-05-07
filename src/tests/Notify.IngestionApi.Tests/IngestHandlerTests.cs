@@ -1,13 +1,12 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using Notify.IngestionApi;
-using Notify.IngestionApi.Ingestion;
+using Notify.Functions.Ingestion;
 using Notify.Shared.Cosmos;
 using Notify.Shared.Hashing;
 using Notify.Shared.Json;
 
-namespace Notify.IngestionApi.Tests;
+namespace Notify.Functions.Ingestion.Tests;
 
 public class IngestHandlerTests
 {
@@ -68,7 +67,7 @@ public class IngestHandlerTests
     public async Task Oversized_payload_returns_413_without_parsing_body()
     {
         var (handler, _, _) = NewHandler();
-        var result = await handler.HandleAsync("npk_x", Stream.Null, contentLength: IngestionApiOptions.MaxRequestBodyBytes + 1);
+        var result = await handler.HandleAsync("npk_x", Stream.Null, contentLength: IngestionOptions.MaxRequestBodyBytes + 1);
         Assert.IsType<IngestResult.PayloadTooLarge>(result);
     }
 

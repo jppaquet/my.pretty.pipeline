@@ -8,8 +8,5 @@
     <Project Path="tests/Notify.E2E/Notify.E2E.csproj" />
   </Folder>
   <Project Path="Notify.Shared/Notify.Shared.csproj" />
-  <Project Path="Notify.IngestionApi/Notify.IngestionApi.csproj" />
-  <Project Path="Notify.Archive/Notify.Archive.csproj" />
-  <Project Path="Notify.DeviceApi/Notify.DeviceApi.csproj" />
-  <Project Path="Notify.PushDelivery/Notify.PushDelivery.csproj" />
+  <Project Path="Notify.Functions/Notify.Functions.csproj" />
 </Solution>

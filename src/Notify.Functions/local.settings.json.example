@@ -1,0 +1,17 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
+
+    "CosmosAccountEndpoint": "https://localhost:8081",
+    "CosmosDatabase": "notify",
+    "CosmosProjectsContainer": "projects",
+    "CosmosNotificationsContainer": "notifications",
+    "EventGridTopicEndpoint": "http://localhost:5050/api/events",
+    "ApiKeyPepperBase64": "<32-byte base64 pepper for local dev only>",
+
+    "NotificationHubConnectionString": "Endpoint=sb://<ns>.servicebus.windows.net/;SharedAccessKeyName=DefaultFullSharedAccessSignature;SharedAccessKey=<key>",
+    "NotificationHubName": "nh-notify-dev"
+  }
+}

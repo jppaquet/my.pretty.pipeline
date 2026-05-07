@@ -1,8 +1,8 @@
-using Notify.PushDelivery.Push;
+using Notify.Functions.Push;
 using Notify.Shared;
 using Notify.Shared.CloudEvents;
 
-namespace Notify.PushDelivery.Tests;
+namespace Notify.Functions.Push.Tests;
 
 public class PushHandlerTests
 {

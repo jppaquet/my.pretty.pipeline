@@ -19,7 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Notify.PushDelivery\Notify.PushDelivery.csproj" />
+    <ProjectReference Include="..\..\Notify.Functions\Notify.Functions.csproj" />
   </ItemGroup>
 
 </Project>
