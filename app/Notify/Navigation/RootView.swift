@@ -28,7 +28,7 @@ struct RootView: View {
         .task {
             // Ask for push permission once. Token POST happens later when
             // AppDelegate gets `didRegisterForRemoteNotificationsWithDeviceToken`.
-            try? await container.push.requestAuthorization()
+            _ = try? await container.push.requestAuthorization()
         }
     }
 

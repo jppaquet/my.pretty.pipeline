@@ -23,6 +23,7 @@ struct InboxView: View {
                     }
                 }
                 .refreshable { await viewModel.refresh() }
+                .accessibilityIdentifier("inbox.list")
                 .overlay {
                     if items.isEmpty {
                         ContentUnavailableView(
@@ -45,7 +46,6 @@ struct InboxView: View {
             }
         }
         .navigationTitle("Inbox")
-        .accessibilityIdentifier("inbox.list")
         .task { if case .idle = viewModel.state { await viewModel.load() } }
     }
 }

@@ -7,7 +7,7 @@ final class InboxViewModel {
     enum State: Equatable {
         case idle
         case loading
-        case loaded(items: [Notification], continuationToken: String?)
+        case loaded(items: [InboxNotification], continuationToken: String?)
         case failed(message: String)
     }
 

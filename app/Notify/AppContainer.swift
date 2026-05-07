@@ -24,6 +24,11 @@ final class AppContainer {
     static func makeDefault() -> AppContainer {
         let keychain = KeychainStore()
 
+        // UI tests run hermetically against a mock backend.
+        if ProcessInfo.processInfo.arguments.contains("-NotifyUITestMockBackend") {
+            return AppContainer(api: MockNotifyAPI(), keychain: keychain)
+        }
+
         let plistURL = Bundle.main.object(forInfoDictionaryKey: "NotifyAPIBaseURL") as? String
         let baseURL = (plistURL.flatMap(URL.init(string:)))
             ?? URL(string: "https://func-notify.invalid")!  // sentinel — surfaces in failed-load state

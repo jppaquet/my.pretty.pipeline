@@ -16,7 +16,8 @@ final class InboxFlowTests: XCTestCase {
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
         // Sidebar list always present in both compact (iPhone) and regular (iPad)
         // size classes — `inbox.list` is the accessibilityIdentifier on InboxView.
-        let inbox = app.otherElements["inbox.list"]
+        // Under the hood SwiftUI List is a CollectionView on this OS version.
+        let inbox = app.collectionViews["inbox.list"]
         XCTAssertTrue(inbox.waitForExistence(timeout: 5))
     }
 }

@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct InboxNotificationDetailView: View {
+struct NotificationDetailView: View {
     let notification: InboxNotification
 
     var body: some View {
