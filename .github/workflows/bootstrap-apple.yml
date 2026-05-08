@@ -1,0 +1,148 @@
+name: bootstrap-apple
+
+# One-time-ish bootstrap to wire the manually-issued APNs Auth Key (.p8) into
+# Notification Hubs. Idempotent — re-run on key rotation or environment flip.
+#
+# Apple Developer portal steps (cannot be automated; Apple's UI is the only path):
+#   1. Identifiers → register `my.pretty.pipeline` with Push Notifications.
+#   2. Keys → create an APNs Auth Key, download the .p8, note the Key ID.
+#   3. Membership → note your Team ID.
+#
+# Pre-flight secret (set before running):
+#   gh secret set APNS_AUTH_KEY_P8 < /path/to/AuthKey_<KEY_ID>.p8
+#
+# Trigger from the Actions tab → "Run workflow", or:
+#   gh workflow run bootstrap-apple.yml \
+#     -f apns_key_id=ABCDEFGHIJ -f apple_team_id=K9HLM12NOP \
+#     -f apns_environment=sandbox
+
+on:
+  workflow_dispatch:
+    inputs:
+      apns_key_id:
+        description: '10-char Key ID from the APNs Auth Key (Apple Dev → Keys)'
+        required: true
+        type: string
+      apple_team_id:
+        description: '10-char Team ID (Apple Dev → Membership)'
+        required: true
+        type: string
+      bundle_id:
+        description: 'Bundle ID — must match the registered App ID and the app target'
+        required: true
+        type: string
+        default: my.pretty.pipeline
+      apns_environment:
+        description: 'sandbox (Xcode/local debug) or production (TestFlight/App Store)'
+        required: true
+        type: choice
+        options:
+          - sandbox
+          - production
+        default: sandbox
+
+permissions:
+  id-token: write   # OIDC into Azure
+  contents: read
+
+jobs:
+  wire-apns:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve NH namespace + hub names
+        id: nh
+        run: |
+          RG="${{ vars.AZURE_RG_DEV }}"
+          NH_NS=$(az notification-hub namespace list -g "$RG" --query "[0].name" -o tsv)
+          NH_NAME=$(az notification-hub list -g "$RG" --namespace-name "$NH_NS" --query "[0].name" -o tsv)
+          if [ -z "$NH_NS" ] || [ -z "$NH_NAME" ]; then
+            echo "::error::Could not find NH namespace or hub in $RG — has cd-deploy run?"
+            exit 1
+          fi
+          {
+            echo "rg=$RG"
+            echo "ns=$NH_NS"
+            echo "hub=$NH_NAME"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Pick APNs endpoint
+        id: endpoint
+        run: |
+          if [ "${{ inputs.apns_environment }}" = "production" ]; then
+            echo "url=https://api.push.apple.com:443/3/device" >> "$GITHUB_OUTPUT"
+          else
+            echo "url=https://api.sandbox.push.apple.com:443/3/device" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload APNs token credential to NH
+        env:
+          APNS_AUTH_KEY_P8: ${{ secrets.APNS_AUTH_KEY_P8 }}
+        run: |
+          if [ -z "$APNS_AUTH_KEY_P8" ]; then
+            echo "::error::Repo secret APNS_AUTH_KEY_P8 is empty. Set with: gh secret set APNS_AUTH_KEY_P8 < AuthKey_<KEY_ID>.p8"
+            exit 1
+          fi
+          # az --apns-token mishandles multi-line PEM input; flatten to one line.
+          APNS_TOKEN="$(printf '%s' "$APNS_AUTH_KEY_P8" | tr -d '\r\n')"
+          az notification-hub credential apns update \
+            -g  "${{ steps.nh.outputs.rg }}" \
+            --namespace-name "${{ steps.nh.outputs.ns }}" \
+            -n  "${{ steps.nh.outputs.hub }}" \
+            --apns-certificate-or-token-type Token \
+            --apns-key-id   "${{ inputs.apns_key_id }}" \
+            --apns-app-name "${{ inputs.bundle_id }}" \
+            --apns-app-id   "${{ inputs.apple_team_id }}" \
+            --apns-token    "$APNS_TOKEN" \
+            --apns-endpoint "${{ steps.endpoint.outputs.url }}"
+
+      - name: Verify NH credential
+        run: |
+          az notification-hub credential list \
+            -g "${{ steps.nh.outputs.rg }}" \
+            --namespace-name "${{ steps.nh.outputs.ns }}" \
+            -n "${{ steps.nh.outputs.hub }}" \
+            --query "apnsCredential.{keyId:keyId, appId:appId, appName:appName, endpoint:endpoint}" \
+            -o table
+
+      - name: Preflight cd-testflight secrets
+        # Non-blocking informational check so the operator knows whether
+        # tagging v*.*.* will succeed once they're done here.
+        env:
+          K1: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          K2: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+          K3: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+        run: |
+          missing=()
+          [ -z "$K1" ] && missing+=("APP_STORE_CONNECT_API_KEY_ID")
+          [ -z "$K2" ] && missing+=("APP_STORE_CONNECT_API_ISSUER_ID")
+          [ -z "$K3" ] && missing+=("APP_STORE_CONNECT_API_KEY_P8")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::warning::cd-testflight will fail until these secrets are set: ${missing[*]}"
+          else
+            echo "All cd-testflight secrets present — tagging v*.*.* will reach TestFlight."
+          fi
+
+      - name: Summary
+        run: |
+          {
+            echo "## Apple → Notification Hubs"
+            echo ""
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| RG | \`${{ steps.nh.outputs.rg }}\` |"
+            echo "| Namespace | \`${{ steps.nh.outputs.ns }}\` |"
+            echo "| Hub | \`${{ steps.nh.outputs.hub }}\` |"
+            echo "| Bundle ID | \`${{ inputs.bundle_id }}\` |"
+            echo "| APNs Key ID | \`${{ inputs.apns_key_id }}\` |"
+            echo "| Team ID | \`${{ inputs.apple_team_id }}\` |"
+            echo "| Environment | \`${{ inputs.apns_environment }}\` |"
+            echo ""
+            echo "Push delivery is wired end-to-end. Next: tag \`v0.1.0\` to trigger \`cd-testflight\`."
+          } >> "$GITHUB_STEP_SUMMARY"
