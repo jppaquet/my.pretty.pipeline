@@ -82,33 +82,45 @@ jobs:
           fi
 
       - name: Upload APNs token credential to NH
+        # PATCHes the hub resource directly via the management API. The
+        # `az notification-hub` extension on hosted runners is too old to
+        # know `--apns-token` / `--apns-certificate-or-token-type`, so we
+        # bypass it entirely. This works against any az version.
         env:
           APNS_AUTH_KEY_P8: ${{ secrets.APNS_AUTH_KEY_P8 }}
+          SUB: ${{ vars.AZURE_SUBSCRIPTION_ID }}
         run: |
           if [ -z "$APNS_AUTH_KEY_P8" ]; then
             echo "::error::Repo secret APNS_AUTH_KEY_P8 is empty. Set with: gh secret set APNS_AUTH_KEY_P8 < AuthKey_<KEY_ID>.p8"
             exit 1
           fi
-          # az --apns-token mishandles multi-line PEM input; flatten to one line.
-          APNS_TOKEN="$(printf '%s' "$APNS_AUTH_KEY_P8" | tr -d '\r\n')"
-          az notification-hub credential apns update \
-            -g  "${{ steps.nh.outputs.rg }}" \
-            --namespace-name "${{ steps.nh.outputs.ns }}" \
-            -n  "${{ steps.nh.outputs.hub }}" \
-            --apns-certificate-or-token-type Token \
-            --apns-key-id   "${{ inputs.apns_key_id }}" \
-            --apns-app-name "${{ inputs.bundle_id }}" \
-            --apns-app-id   "${{ inputs.apple_team_id }}" \
-            --apns-token    "$APNS_TOKEN" \
-            --apns-endpoint "${{ steps.endpoint.outputs.url }}"
+          URL="https://management.azure.com/subscriptions/${SUB}/resourceGroups/${{ steps.nh.outputs.rg }}/providers/Microsoft.NotificationHubs/namespaces/${{ steps.nh.outputs.ns }}/notificationHubs/${{ steps.nh.outputs.hub }}?api-version=2023-09-01"
+
+          # jq -c serialises the PEM as a single-line JSON string with \n escapes,
+          # which is exactly what the NH REST API expects for `token`.
+          BODY=$(jq -nc \
+            --arg keyId    "${{ inputs.apns_key_id }}" \
+            --arg teamId   "${{ inputs.apple_team_id }}" \
+            --arg bundle   "${{ inputs.bundle_id }}" \
+            --arg token    "$APNS_AUTH_KEY_P8" \
+            --arg endpoint "${{ steps.endpoint.outputs.url }}" \
+            '{ properties: { apnsCredential: { properties: {
+                 keyId: $keyId, appId: $teamId, appName: $bundle,
+                 token: $token, endpoint: $endpoint
+              } } } }')
+
+          az rest --method PATCH --url "$URL" \
+            --headers "Content-Type=application/json" \
+            --body "$BODY" >/dev/null
 
       - name: Verify NH credential
+        env:
+          SUB: ${{ vars.AZURE_SUBSCRIPTION_ID }}
         run: |
-          az notification-hub credential list \
-            -g "${{ steps.nh.outputs.rg }}" \
-            --namespace-name "${{ steps.nh.outputs.ns }}" \
-            -n "${{ steps.nh.outputs.hub }}" \
-            --query "apnsCredential.{keyId:keyId, appId:appId, appName:appName, endpoint:endpoint}" \
+          URL="https://management.azure.com/subscriptions/${SUB}/resourceGroups/${{ steps.nh.outputs.rg }}/providers/Microsoft.NotificationHubs/namespaces/${{ steps.nh.outputs.ns }}/notificationHubs/${{ steps.nh.outputs.hub }}?api-version=2023-09-01"
+          # `token` is masked by the API in the response — only the metadata is returned.
+          az rest --method GET --url "$URL" \
+            --query "properties.apnsCredential.properties.{keyId:keyId, appId:appId, appName:appName, endpoint:endpoint}" \
             -o table
 
       - name: Preflight cd-testflight secrets
