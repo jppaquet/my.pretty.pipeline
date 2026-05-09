@@ -96,13 +96,21 @@ jobs:
           fi
           URL="https://management.azure.com/subscriptions/${SUB}/resourceGroups/${{ steps.nh.outputs.rg }}/providers/Microsoft.NotificationHubs/namespaces/${{ steps.nh.outputs.ns }}/notificationHubs/${{ steps.nh.outputs.hub }}?api-version=2023-09-01"
 
-          # jq -c serialises the PEM as a single-line JSON string with \n escapes,
-          # which is exactly what the NH REST API expects for `token`.
+          # NH's APNs validator parses the .p8 itself and only accepts the bare
+          # base64 body — Microsoft's docs state this explicitly:
+          #   "The value must have the PEM header/footer stripped from it when
+          #    you supply it to the NH Portal/API."
+          # https://learn.microsoft.com/en-us/azure/notification-hubs/notification-hubs-push-notification-http2-token-authentication
+          # Apple's APNs accepts full PEM directly, which is why a raw curl test
+          # passes while NH validation fails with "Failed to validate credentials
+          # with APNS" — NH can't parse PEM-wrapped input.
+          APNS_TOKEN=$(printf '%s' "$APNS_AUTH_KEY_P8" | grep -v -- '-----' | tr -d '\r\n')
+
           BODY=$(jq -nc \
             --arg keyId    "${{ inputs.apns_key_id }}" \
             --arg teamId   "${{ inputs.apple_team_id }}" \
             --arg bundle   "${{ inputs.bundle_id }}" \
-            --arg token    "$APNS_AUTH_KEY_P8" \
+            --arg token    "$APNS_TOKEN" \
             --arg endpoint "${{ steps.endpoint.outputs.url }}" \
             '{ properties: { apnsCredential: { properties: {
                  keyId: $keyId, appId: $teamId, appName: $bundle,
