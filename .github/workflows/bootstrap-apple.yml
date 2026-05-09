@@ -101,7 +101,7 @@ jobs:
             echo "::error::Repo secret APNS_AUTH_KEY_P8 is empty. Set with: gh secret set APNS_AUTH_KEY_P8 < AuthKey_<KEY_ID>.p8"
             exit 1
           fi
-          URL="https://management.azure.com/subscriptions/${SUB}/resourceGroups/${{ steps.nh.outputs.rg }}/providers/Microsoft.NotificationHubs/namespaces/${{ steps.nh.outputs.ns }}/notificationHubs/${{ steps.nh.outputs.hub }}?api-version=2023-09-01"
+          URL="https://management.azure.com/subscriptions/${SUB}/resourceGroups/${{ steps.nh.outputs.rg }}/providers/Microsoft.NotificationHubs/namespaces/${{ steps.nh.outputs.ns }}/notificationHubs/${{ steps.nh.outputs.hub }}?api-version=2023-10-01-preview"
 
           EXISTING=$(az rest --method GET --url "$URL")
           APNS_TOKEN=$(printf '%s' "$APNS_AUTH_KEY_P8" | grep -v -- '-----' | tr -d '\r\n')
@@ -152,7 +152,7 @@ jobs:
           SUB: ${{ vars.AZURE_SUBSCRIPTION_ID }}
         run: |
           set -euo pipefail
-          URL="https://management.azure.com/subscriptions/${SUB}/resourceGroups/${{ steps.nh.outputs.rg }}/providers/Microsoft.NotificationHubs/namespaces/${{ steps.nh.outputs.ns }}/notificationHubs/${{ steps.nh.outputs.hub }}?api-version=2023-09-01"
+          URL="https://management.azure.com/subscriptions/${SUB}/resourceGroups/${{ steps.nh.outputs.rg }}/providers/Microsoft.NotificationHubs/namespaces/${{ steps.nh.outputs.ns }}/notificationHubs/${{ steps.nh.outputs.hub }}?api-version=2023-10-01-preview"
           STORED=$(az rest --method GET --url "$URL" --query "properties.apnsCredential.properties.keyId" -o tsv)
           if [ -z "$STORED" ] || [ "$STORED" = "null" ]; then
             echo "::error::apnsCredential is null after PUT — credential was not persisted."
