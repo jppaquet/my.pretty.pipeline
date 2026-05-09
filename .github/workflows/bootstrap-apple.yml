@@ -82,42 +82,51 @@ jobs:
           fi
 
       - name: Upload APNs token credential to NH
-        # PATCHes the hub resource directly via the management API. The
-        # `az notification-hub` extension on hosted runners is too old to
-        # know `--apns-token` / `--apns-certificate-or-token-type`, so we
-        # bypass it entirely. This works against any az version.
+        # Microsoft.NotificationHubs/notificationHubs only documents PUT
+        # (Create-Or-Update) — PATCH on this resource silently 200s without
+        # persisting anything. We GET the existing hub to preserve its
+        # location, then PUT a body that merges in apnsCredential.
+        #
+        # NH's APNs validator parses the .p8 itself and only accepts the bare
+        # base64 body — Microsoft's docs state this explicitly:
+        #   "The value must have the PEM header/footer stripped from it when
+        #    you supply it to the NH Portal/API."
+        # https://learn.microsoft.com/en-us/azure/notification-hubs/notification-hubs-push-notification-http2-token-authentication
         env:
           APNS_AUTH_KEY_P8: ${{ secrets.APNS_AUTH_KEY_P8 }}
           SUB: ${{ vars.AZURE_SUBSCRIPTION_ID }}
         run: |
+          set -euo pipefail
           if [ -z "$APNS_AUTH_KEY_P8" ]; then
             echo "::error::Repo secret APNS_AUTH_KEY_P8 is empty. Set with: gh secret set APNS_AUTH_KEY_P8 < AuthKey_<KEY_ID>.p8"
             exit 1
           fi
           URL="https://management.azure.com/subscriptions/${SUB}/resourceGroups/${{ steps.nh.outputs.rg }}/providers/Microsoft.NotificationHubs/namespaces/${{ steps.nh.outputs.ns }}/notificationHubs/${{ steps.nh.outputs.hub }}?api-version=2023-09-01"
 
-          # NH's APNs validator parses the .p8 itself and only accepts the bare
-          # base64 body — Microsoft's docs state this explicitly:
-          #   "The value must have the PEM header/footer stripped from it when
-          #    you supply it to the NH Portal/API."
-          # https://learn.microsoft.com/en-us/azure/notification-hubs/notification-hubs-push-notification-http2-token-authentication
-          # Apple's APNs accepts full PEM directly, which is why a raw curl test
-          # passes while NH validation fails with "Failed to validate credentials
-          # with APNS" — NH can't parse PEM-wrapped input.
+          EXISTING=$(az rest --method GET --url "$URL")
           APNS_TOKEN=$(printf '%s' "$APNS_AUTH_KEY_P8" | grep -v -- '-----' | tr -d '\r\n')
 
-          BODY=$(jq -nc \
+          # Strip read-only fields (id/name/type/systemData/dailyMaxActiveDevices)
+          # and inject the new apnsCredential under properties.
+          BODY=$(echo "$EXISTING" | jq -c \
             --arg keyId    "${{ inputs.apns_key_id }}" \
             --arg teamId   "${{ inputs.apple_team_id }}" \
             --arg bundle   "${{ inputs.bundle_id }}" \
             --arg token    "$APNS_TOKEN" \
             --arg endpoint "${{ steps.endpoint.outputs.url }}" \
-            '{ properties: { apnsCredential: { properties: {
-                 keyId: $keyId, appId: $teamId, appName: $bundle,
-                 token: $token, endpoint: $endpoint
-              } } } }')
+            '{
+               location: .location,
+               properties: ((.properties // {})
+                 | del(.dailyMaxActiveDevices)
+                 | .apnsCredential = {
+                     properties: {
+                       keyId: $keyId, appId: $teamId, appName: $bundle,
+                       token: $token, endpoint: $endpoint
+                     }
+                   })
+             }')
 
-          az rest --method PATCH --url "$URL" \
+          az rest --method PUT --url "$URL" \
             --headers "Content-Type=application/json" \
             --body "$BODY" >/dev/null
 
@@ -125,8 +134,18 @@ jobs:
         env:
           SUB: ${{ vars.AZURE_SUBSCRIPTION_ID }}
         run: |
+          set -euo pipefail
           URL="https://management.azure.com/subscriptions/${SUB}/resourceGroups/${{ steps.nh.outputs.rg }}/providers/Microsoft.NotificationHubs/namespaces/${{ steps.nh.outputs.ns }}/notificationHubs/${{ steps.nh.outputs.hub }}?api-version=2023-09-01"
-          # `token` is masked by the API in the response — only the metadata is returned.
+          STORED=$(az rest --method GET --url "$URL" --query "properties.apnsCredential.properties.keyId" -o tsv)
+          if [ -z "$STORED" ] || [ "$STORED" = "null" ]; then
+            echo "::error::apnsCredential is null after PUT — credential was not persisted."
+            exit 1
+          fi
+          if [ "$STORED" != "${{ inputs.apns_key_id }}" ]; then
+            echo "::error::apnsCredential.keyId mismatch — stored=$STORED expected=${{ inputs.apns_key_id }}"
+            exit 1
+          fi
+          # `token` is masked by the API in the response — only the metadata returns.
           az rest --method GET --url "$URL" \
             --query "properties.apnsCredential.properties.{keyId:keyId, appId:appId, appName:appName, endpoint:endpoint}" \
             -o table
