@@ -81,17 +81,26 @@ jobs:
             echo "url=https://api.sandbox.push.apple.com:443/3/device" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Upload APNs token credential to NH
-        # Microsoft.NotificationHubs/notificationHubs only documents PUT
-        # (Create-Or-Update) — PATCH on this resource silently 200s without
-        # persisting anything. We GET the existing hub to preserve its
-        # location, then PUT a body that merges in apnsCredential.
+      - name: Upload APNs token credential via NH data-plane
+        # The Azure ARM management API at
+        # `Microsoft.NotificationHubs/.../notificationHubs/{hub}` silently
+        # discards `properties.apnsCredential` on every write — PUT/PATCH at
+        # any api-version (2014, 2016, 2017, 2023-09-01, 2023-10-01-preview)
+        # returns 200 OK with the credential field absent from the response.
+        # `az notification-hub credential apns update` and `az deployment
+        # group create` go through this same broken path. We confirmed the
+        # break with raw curl; the management plane is genuinely unable to
+        # set this field, despite the schema.
         #
-        # NH's APNs validator parses the .p8 itself and only accepts the bare
-        # base64 body — Microsoft's docs state this explicitly:
-        #   "The value must have the PEM header/footer stripped from it when
-        #    you supply it to the NH Portal/API."
-        # https://learn.microsoft.com/en-us/azure/notification-hubs/notification-hubs-push-notification-http2-token-authentication
+        # The original NH admin surface — the Service Bus data-plane at
+        # `{namespace}.servicebus.windows.net/{hub}` — does persist the
+        # credential. It uses SAS auth and an Atom XML payload (legacy NH
+        # protocol). NH push delivery reads from this surface, not from the
+        # management plane, so push starts working immediately on success.
+        #
+        # NH parses the .p8 internally and only accepts the bare base64 body
+        # (PEM headers stripped). Apple's APNs accepts full PEM, which is
+        # why a raw curl probe of the same .p8 succeeds while NH fails.
         env:
           APNS_AUTH_KEY_P8: ${{ secrets.APNS_AUTH_KEY_P8 }}
           SUB: ${{ vars.AZURE_SUBSCRIPTION_ID }}
@@ -101,13 +110,13 @@ jobs:
             echo "::error::Repo secret APNS_AUTH_KEY_P8 is empty. Set with: gh secret set APNS_AUTH_KEY_P8 < AuthKey_<KEY_ID>.p8"
             exit 1
           fi
-          URL="https://management.azure.com/subscriptions/${SUB}/resourceGroups/${{ steps.nh.outputs.rg }}/providers/Microsoft.NotificationHubs/namespaces/${{ steps.nh.outputs.ns }}/notificationHubs/${{ steps.nh.outputs.hub }}?api-version=2023-10-01-preview"
 
-          EXISTING=$(az rest --method GET --url "$URL")
+          NS="${{ steps.nh.outputs.ns }}"
+          HUB="${{ steps.nh.outputs.hub }}"
+          RG="${{ steps.nh.outputs.rg }}"
+          ENDPOINT_HOST="${NS}.servicebus.windows.net"
+
           APNS_TOKEN=$(printf '%s' "$APNS_AUTH_KEY_P8" | grep -v -- '-----' | tr -d '\r\n')
-
-          # Sanity-check the secret without leaking it. The .p8 body should be
-          # a single line of base64 between 200–600 chars after stripping.
           TOKEN_LEN=${#APNS_TOKEN}
           if [ "$TOKEN_LEN" -lt 100 ] || [ "$TOKEN_LEN" -gt 1000 ]; then
             echo "::error::APNS_TOKEN length is $TOKEN_LEN — out of expected 200–600 range. Re-set the secret with: gh secret set APNS_AUTH_KEY_P8 < AuthKey_<KEY_ID>.p8"
@@ -115,57 +124,61 @@ jobs:
           fi
           echo "APNS_TOKEN length=$TOKEN_LEN (sanity-passed; bare base64 body)."
 
-          # Strip read-only fields (id/name/type/systemData/dailyMaxActiveDevices)
-          # and inject the new apnsCredential under properties.
-          BODY=$(echo "$EXISTING" | jq -c \
-            --arg keyId    "${{ inputs.apns_key_id }}" \
-            --arg teamId   "${{ inputs.apple_team_id }}" \
-            --arg bundle   "${{ inputs.bundle_id }}" \
-            --arg token    "$APNS_TOKEN" \
-            --arg endpoint "${{ steps.endpoint.outputs.url }}" \
-            '{
-               location: .location,
-               properties: ((.properties // {})
-                 | del(.dailyMaxActiveDevices)
-                 | .apnsCredential = {
-                     properties: {
-                       keyId: $keyId, appId: $teamId, appName: $bundle,
-                       token: $token, endpoint: $endpoint
-                     }
-                   })
-             }')
+          # Mint a SAS for the namespace's RootManageSharedAccessKey. This is
+          # always present (created with the namespace), so we don't depend on
+          # any hub-level rule existing yet.
+          KEY=$(az rest --method POST \
+            --url "https://management.azure.com/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.NotificationHubs/namespaces/$NS/AuthorizationRules/RootManageSharedAccessKey/listKeys?api-version=2023-10-01-preview" \
+            --query primaryKey -o tsv)
 
-          # Capture the response so we can see what NH did with it. `token`
-          # is masked in the response (NH never echoes secret material).
-          # If az rest exits non-zero, set -e propagates the failure.
-          RESPONSE=$(az rest --method PUT --url "$URL" \
-            --headers "Content-Type=application/json" \
-            --body "$BODY")
+          RESOURCE_URI="https://$ENDPOINT_HOST/$HUB"
+          EXPIRY=$(($(date +%s) + 600))
+          ENCODED=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$RESOURCE_URI")
+          STRING_TO_SIGN="${ENCODED}"$'\n'"${EXPIRY}"
+          SIG=$(printf '%s' "$STRING_TO_SIGN" | openssl dgst -binary -sha256 -hmac "$KEY" | openssl base64 -A)
+          SIG_ENCODED=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$SIG")
+          SAS="SharedAccessSignature sr=$ENCODED&sig=$SIG_ENCODED&se=$EXPIRY&skn=RootManageSharedAccessKey"
 
-          echo "=== PUT response (token field is masked by NH) ==="
-          echo "$RESPONSE" | jq '.properties.apnsCredential // "MISSING"'
-          echo "=== full response (apnsCredential subtree) ==="
-          echo "$RESPONSE" | jq '.properties | keys'
+          # Atom XML body — legacy NH wire format. Field names are PascalCase here.
+          # Token holds the bare base64 body (stripped of PEM markers above).
+          XML="<entry xmlns=\"http://www.w3.org/2005/Atom\"><content type=\"application/xml\"><NotificationHubDescription xmlns=\"http://schemas.microsoft.com/netservices/2010/10/servicebus/connect\"><ApnsCredential><Properties><Property><Name>Endpoint</Name><Value>${{ steps.endpoint.outputs.url }}</Value></Property><Property><Name>KeyId</Name><Value>${{ inputs.apns_key_id }}</Value></Property><Property><Name>AppName</Name><Value>${{ inputs.bundle_id }}</Value></Property><Property><Name>AppId</Name><Value>${{ inputs.apple_team_id }}</Value></Property><Property><Name>Token</Name><Value>$APNS_TOKEN</Value></Property></Properties></ApnsCredential></NotificationHubDescription></content></entry>"
 
-      - name: Verify NH credential
-        env:
-          SUB: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          # Capture status + body separately so a non-200 lands in the log.
+          OUT=$(curl -sS -w '\n%{http_code}' -X PUT "https://$ENDPOINT_HOST/$HUB?api-version=2014-09" \
+            -H "Authorization: $SAS" \
+            -H "Content-Type: application/atom+xml;type=entry;charset=utf-8" \
+            -H "If-Match: *" \
+            -H "x-ms-version: 2014-09" \
+            --data-binary "$XML")
+          STATUS=$(printf '%s' "$OUT" | tail -1)
+          BODY=$(printf '%s' "$OUT" | sed '$d')
+
+          if [ "$STATUS" != "200" ]; then
+            echo "::error::Data-plane PUT returned HTTP $STATUS"
+            printf '%s\n' "$BODY"
+            exit 1
+          fi
+
+          # Parse the persisted KeyId out of the Atom response and assert it
+          # matches what we sent. NH masks the Token in the response.
+          STORED_KID=$(printf '%s' "$BODY" \
+            | grep -oE '<Name>KeyId</Name><Value>[^<]+</Value>' \
+            | sed -E 's|.*<Value>([^<]+)</Value>|\1|' \
+            | head -1)
+          if [ -z "$STORED_KID" ]; then
+            echo "::error::Data-plane PUT returned 200 but no KeyId in response body."
+            printf '%s\n' "$BODY"
+            exit 1
+          fi
+          if [ "$STORED_KID" != "${{ inputs.apns_key_id }}" ]; then
+            echo "::error::Persisted KeyId=$STORED_KID expected=${{ inputs.apns_key_id }}"
+            exit 1
+          fi
+          echo "Persisted KeyId=$STORED_KID, AppName=${{ inputs.bundle_id }}, AppId=${{ inputs.apple_team_id }}, Endpoint=${{ steps.endpoint.outputs.url }}"
+
+      - name: Note on management-plane visibility
         run: |
-          set -euo pipefail
-          URL="https://management.azure.com/subscriptions/${SUB}/resourceGroups/${{ steps.nh.outputs.rg }}/providers/Microsoft.NotificationHubs/namespaces/${{ steps.nh.outputs.ns }}/notificationHubs/${{ steps.nh.outputs.hub }}?api-version=2023-10-01-preview"
-          STORED=$(az rest --method GET --url "$URL" --query "properties.apnsCredential.properties.keyId" -o tsv)
-          if [ -z "$STORED" ] || [ "$STORED" = "null" ]; then
-            echo "::error::apnsCredential is null after PUT — credential was not persisted."
-            exit 1
-          fi
-          if [ "$STORED" != "${{ inputs.apns_key_id }}" ]; then
-            echo "::error::apnsCredential.keyId mismatch — stored=$STORED expected=${{ inputs.apns_key_id }}"
-            exit 1
-          fi
-          # `token` is masked by the API in the response — only the metadata returns.
-          az rest --method GET --url "$URL" \
-            --query "properties.apnsCredential.properties.{keyId:keyId, appId:appId, appName:appName, endpoint:endpoint}" \
-            -o table
+          echo "::notice::The Azure portal blade (Apple/APNS settings) and 'az rest GET .../notificationHubs/{hub}' query \`properties.apnsCredential\` will continue to show null. That's an Azure-side limitation: the management plane never reads the credential the data plane stores. Push delivery still works because NH itself reads from the data-plane state."
 
       - name: Preflight cd-testflight secrets
         # Non-blocking informational check so the operator knows whether
