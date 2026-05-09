@@ -106,6 +106,15 @@ jobs:
           EXISTING=$(az rest --method GET --url "$URL")
           APNS_TOKEN=$(printf '%s' "$APNS_AUTH_KEY_P8" | grep -v -- '-----' | tr -d '\r\n')
 
+          # Sanity-check the secret without leaking it. The .p8 body should be
+          # a single line of base64 between 200–600 chars after stripping.
+          TOKEN_LEN=${#APNS_TOKEN}
+          if [ "$TOKEN_LEN" -lt 100 ] || [ "$TOKEN_LEN" -gt 1000 ]; then
+            echo "::error::APNS_TOKEN length is $TOKEN_LEN — out of expected 200–600 range. Re-set the secret with: gh secret set APNS_AUTH_KEY_P8 < AuthKey_<KEY_ID>.p8"
+            exit 1
+          fi
+          echo "APNS_TOKEN length=$TOKEN_LEN (sanity-passed; bare base64 body)."
+
           # Strip read-only fields (id/name/type/systemData/dailyMaxActiveDevices)
           # and inject the new apnsCredential under properties.
           BODY=$(echo "$EXISTING" | jq -c \
@@ -126,9 +135,17 @@ jobs:
                    })
              }')
 
-          az rest --method PUT --url "$URL" \
+          # Capture the response so we can see what NH did with it. `token`
+          # is masked in the response (NH never echoes secret material).
+          # If az rest exits non-zero, set -e propagates the failure.
+          RESPONSE=$(az rest --method PUT --url "$URL" \
             --headers "Content-Type=application/json" \
-            --body "$BODY" >/dev/null
+            --body "$BODY")
+
+          echo "=== PUT response (token field is masked by NH) ==="
+          echo "$RESPONSE" | jq '.properties.apnsCredential // "MISSING"'
+          echo "=== full response (apnsCredential subtree) ==="
+          echo "$RESPONSE" | jq '.properties | keys'
 
       - name: Verify NH credential
         env:
