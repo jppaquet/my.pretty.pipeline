@@ -33,14 +33,24 @@ resource hub 'Microsoft.NotificationHubs/namespaces/notificationHubs@2023-09-01'
   properties: {}
 }
 
-// Default authorization rule with Manage permissions — created automatically
-// alongside every NH. We listKeys against it to surface the connection string
-// to consumers (DeviceApi for CreateOrUpdateInstallation, PushDelivery for
-// SendNotification). Treat the output as sensitive — only flow it to other
-// modules' app settings, never log it.
-resource defaultRule 'Microsoft.NotificationHubs/namespaces/notificationHubs/AuthorizationRules@2023-09-01' existing = {
+// Default authorization rule with Manage/Listen/Send. The portal historically
+// auto-created this with the hub, but the 2023-* api-versions don't, and any
+// hub PUT (including this Bicep deploy) wipes hub-level rules that aren't in
+// the template. We declare it explicitly so it's always present after a deploy.
+// We listKeys against it to surface the connection string to consumers
+// (DeviceApi for CreateOrUpdateInstallation, PushDelivery for SendNotification).
+// Treat the output as sensitive — only flow it to other modules' app settings,
+// never log it.
+resource defaultRule 'Microsoft.NotificationHubs/namespaces/notificationHubs/AuthorizationRules@2023-09-01' = {
   parent: hub
   name: 'DefaultFullSharedAccessSignature'
+  properties: {
+    rights: [
+      'Listen'
+      'Manage'
+      'Send'
+    ]
+  }
 }
 
 output namespaceName string = namespace.name
