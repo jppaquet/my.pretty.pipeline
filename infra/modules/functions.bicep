@@ -16,8 +16,8 @@ param env string
 @description('Tags.')
 param tags object
 
-@description('Cosmos DB account name (for app setting wiring).')
-param cosmosAccountName string
+@description('Cosmos DB account endpoint URL (e.g. https://<acct>.documents.azure.com:443/). Bound into every *Options.CosmosAccountEndpoint at startup.')
+param cosmosAccountEndpoint string
 
 @description('Key Vault name (for @Microsoft.KeyVault references).')
 param keyVaultName string
@@ -28,6 +28,9 @@ param notificationHubConnectionString string
 
 @description('Notification Hub name (DeviceApi + PushDelivery).')
 param notificationHubName string
+
+@description('Resource ID of the user-assigned managed identity the Function App uses at runtime. The same identity gets Cosmos data-plane access in cosmos.bicep; DefaultAzureCredential picks it up automatically when it is the only MI attached.')
+param userAssignedIdentityResourceId string
 
 var storageName = toLower('st${namePrefix}${env}${uniqueString(resourceGroup().id)}')
 var planName = 'plan-${namePrefix}-${env}'
@@ -94,7 +97,17 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
   location: location
   tags: tags
   kind: 'functionapp,linux'
-  identity: { type: 'SystemAssigned' }
+  // UserAssigned-only so role assignments (Cosmos data plane in cosmos.bicep)
+  // can be computed at deploy start — system-assigned principalIds are only
+  // known post-creation, which causes BCP120 in role-assignment resources.
+  // AzureWebJobsStorage uses the storage account key, not MI, so dropping
+  // SystemAssigned doesn't affect the blob-deploy path.
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${userAssignedIdentityResourceId}': {}
+    }
+  }
   properties: {
     serverFarmId: plan.id
     httpsOnly: true
@@ -124,7 +137,7 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
       appSettings: [
         { name: 'AzureWebJobsStorage', value: 'DefaultEndpointsProtocol=https;AccountName=${storage.name};EndpointSuffix=${environment().suffixes.storage};AccountKey=${storage.listKeys().keys[0].value}' }
         { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsights.properties.ConnectionString }
-        { name: 'COSMOS_ACCOUNT_NAME', value: cosmosAccountName }
+        { name: 'CosmosAccountEndpoint', value: cosmosAccountEndpoint }
         { name: 'KEY_VAULT_NAME', value: keyVaultName }
         // DeviceApi (Notify.DeviceApi/DeviceApiOptions.cs) reads these via
         // ConfigureFunctionsWorkerDefaults binding. PushDelivery will consume
@@ -141,4 +154,3 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
 
 output functionAppName string = functionApp.name
 output defaultHostname string = functionApp.properties.defaultHostName
-output principalIdProduction string = functionApp.identity.principalId

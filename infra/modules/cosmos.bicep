@@ -21,6 +21,9 @@ param notificationsTtlSeconds int = 60 * 60 * 24 * 90
 @maxValue(1000)
 param sharedThroughput int = 1000
 
+@description('Principal IDs to grant Cosmos DB Built-in Data Contributor on this account (read + write across every container in `notify`). Used by the Function App runtime via DefaultAzureCredential — without this, CosmosClient calls 401 and the host returns 500.')
+param dataContributorPrincipalIds array = []
+
 // Cosmos account names are globally unique (DNS). Salted with a per-RG hash.
 var accountName = 'cosmos-${namePrefix}-${env}-${take(uniqueString(resourceGroup().id), 6)}'
 
@@ -96,6 +99,17 @@ resource projects 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers
     }
   }
 }
+
+resource dataContributor 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-05-15' = [for principalId in dataContributorPrincipalIds: {
+  parent: account
+  name: guid(account.id, principalId, '00000000-0000-0000-0000-000000000002')
+  properties: {
+    // Built-in role: Cosmos DB Built-in Data Contributor (data plane read + write).
+    roleDefinitionId: '${account.id}/sqlRoleDefinitions/00000000-0000-0000-0000-000000000002'
+    principalId: principalId
+    scope: account.id
+  }
+}]
 
 output accountName string = account.name
 output endpoint string = account.properties.documentEndpoint
