@@ -50,6 +50,12 @@ module cosmos 'modules/cosmos.bicep' = {
     namePrefix: namePrefix
     env: env
     tags: tags
+    // Grant the Function App runtime identity Data Contributor on the data
+    // plane. Same MI as cd-deploy uses, attached to the function app via
+    // functions.bicep — DefaultAzureCredential picks it up automatically.
+    dataContributorPrincipalIds: [
+      mi.properties.principalId
+    ]
   }
 }
 
@@ -89,10 +95,11 @@ module functions 'modules/functions.bicep' = {
     namePrefix: namePrefix
     env: env
     tags: tags
-    cosmosAccountName: cosmos.outputs.accountName
+    cosmosAccountEndpoint: cosmos.outputs.endpoint
     keyVaultName: keyvault.outputs.vaultName
     notificationHubConnectionString: notificationHub.outputs.hubConnectionString
     notificationHubName: notificationHub.outputs.hubName
+    userAssignedIdentityResourceId: mi.id
   }
 }
 
