@@ -1,0 +1,99 @@
+name: CodeQL
+
+# Replaces GitHub's "Default setup" for CodeQL. Default setup re-runs the full
+# autobuild (dotnet restore + build -c Release) on every push, doesn't cancel
+# stale runs, and ignores path filters — which is why a flurry of main merges
+# pinned 4 concurrent runs at 13+ minutes each.
+#
+# IMPORTANT: before merging this PR, disable Default setup in
+#   Settings → Code security → Code scanning → CodeQL → Default setup → Disable
+# Otherwise both setups run in parallel and double the CI cost.
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - '.gitignore'
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - '.gitignore'
+  schedule:
+    # Weekly baseline so a quiet `main` still gets an analysis on the latest
+    # CodeQL query suite. Monday 07:24 UTC = off-peak for everyone.
+    - cron: '24 7 * * 1'
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
+concurrency:
+  # PRs cancel stale runs aggressively. Main pushes also cancel — security
+  # baselines care about latest HEAD, not every intermediate commit, and the
+  # weekly schedule fills any gap if main goes quiet.
+  group: codeql-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ${{ matrix.runs-on }}
+    timeout-minutes: 30
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # C#: build-mode `none` analyzes source directly — CodeQL 2.16+ no
+          # longer needs `dotnet build` for SAST on .NET 5+ projects. Drops
+          # the C# analyze step from ~5 min (build + analyze) to ~30-60 s.
+          - language: csharp
+            runs-on: ubuntu-24.04
+            build-mode: none
+          # Swift requires a real Xcode build; macos-15 ships with Xcode 26.
+          - language: swift
+            runs-on: macos-15
+            build-mode: manual
+          # GitHub Actions workflow analysis — fast, source-only.
+          - language: actions
+            runs-on: ubuntu-24.04
+            build-mode: none
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          queries: security-extended
+
+      # Swift is the only language that still needs a manual build step.
+      # Skip code signing — CodeQL only needs the compiled artifacts to
+      # build its database, not a runnable .app.
+      - name: Build (Swift)
+        if: matrix.language == 'swift'
+        run: |
+          xcodebuild \
+            -project app/Notify.xcodeproj \
+            -scheme Notify \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:${{ matrix.language }}
