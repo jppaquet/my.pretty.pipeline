@@ -34,6 +34,14 @@ var tags = {
   managedBy: 'bicep'
 }
 
+// Event Grid topic endpoint follows a fixed Azure-Public-Cloud pattern:
+// https://<topicName>.<region>-1.eventgrid.azure.net/api/events
+// Computed here instead of referencing eventgrid.outputs.topicEndpoint so the
+// functions module (which consumes this for IngestionOptions.EventGridTopicEndpoint)
+// doesn't depend on eventgrid — avoids reordering the module graph and the
+// chicken-egg with eventgrid needing functionAppName for its subscriptions.
+var eventGridTopicEndpoint = 'https://egt-${namePrefix}-${env}.${location}-1.eventgrid.azure.net/api/events'
+
 // Existing managed identity (created by github-oidc.bicep during bootstrap).
 // We need its principalId to grant Key Vault Secrets User. We only *reference*
 // it — never re-create — so cd-deploy never tries to write to it.
@@ -97,6 +105,7 @@ module functions 'modules/functions.bicep' = {
     tags: tags
     cosmosAccountEndpoint: cosmos.outputs.endpoint
     keyVaultName: keyvault.outputs.vaultName
+    eventGridTopicEndpoint: eventGridTopicEndpoint
     notificationHubConnectionString: notificationHub.outputs.hubConnectionString
     notificationHubName: notificationHub.outputs.hubName
     userAssignedIdentityResourceId: mi.id
