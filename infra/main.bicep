@@ -100,6 +100,7 @@ module functions 'modules/functions.bicep' = {
     notificationHubConnectionString: notificationHub.outputs.hubConnectionString
     notificationHubName: notificationHub.outputs.hubName
     userAssignedIdentityResourceId: mi.id
+    userAssignedIdentityClientId: mi.properties.clientId
   }
 }
 
