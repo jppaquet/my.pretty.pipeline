@@ -32,6 +32,9 @@ param notificationHubName string
 @description('Resource ID of the user-assigned managed identity the Function App uses at runtime. The same identity gets Cosmos data-plane access in cosmos.bicep; DefaultAzureCredential picks it up automatically when it is the only MI attached.')
 param userAssignedIdentityResourceId string
 
+@description('clientId of the user-assigned managed identity. Exposed to the worker as AZURE_CLIENT_ID so DefaultAzureCredential.ManagedIdentityCredential mints a token for the right identity. Without it, IMDS returns 400 "Identity not found" because no system MI exists to fall back on.')
+param userAssignedIdentityClientId string
+
 var storageName = toLower('st${namePrefix}${env}${uniqueString(resourceGroup().id)}')
 var planName = 'plan-${namePrefix}-${env}'
 var appInsightsName = 'appi-${namePrefix}-${env}'
@@ -137,6 +140,7 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
       appSettings: [
         { name: 'AzureWebJobsStorage', value: 'DefaultEndpointsProtocol=https;AccountName=${storage.name};EndpointSuffix=${environment().suffixes.storage};AccountKey=${storage.listKeys().keys[0].value}' }
         { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsights.properties.ConnectionString }
+        { name: 'AZURE_CLIENT_ID', value: userAssignedIdentityClientId }
         { name: 'CosmosAccountEndpoint', value: cosmosAccountEndpoint }
         { name: 'KEY_VAULT_NAME', value: keyVaultName }
         // DeviceApi (Notify.DeviceApi/DeviceApiOptions.cs) reads these via
