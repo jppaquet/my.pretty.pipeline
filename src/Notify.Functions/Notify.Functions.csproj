@@ -39,7 +39,7 @@
     <PackageReference Include="Azure.Identity" Version="1.21.0" />
     <PackageReference Include="Microsoft.Azure.NotificationHubs" Version="4.2.0" />
     <!-- Pin transitive: NH SDK 4.2.0 pulls Microsoft.Extensions.Caching.Memory 6.0.1 (GHSA-qj66-m88j-hmgj high). -->
-    <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.7" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.8" />
   </ItemGroup>
 
   <ItemGroup>
