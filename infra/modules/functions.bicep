@@ -22,6 +22,9 @@ param cosmosAccountEndpoint string
 @description('Key Vault name (for @Microsoft.KeyVault references).')
 param keyVaultName string
 
+@description('Event Grid custom-topic endpoint URL. Bound into IngestionOptions.EventGridTopicEndpoint so the Ingest function publishes CloudEvents.')
+param eventGridTopicEndpoint string
+
 @description('Notification Hub full SAS connection string (DeviceApi + PushDelivery).')
 @secure()
 param notificationHubConnectionString string
@@ -114,6 +117,10 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
   properties: {
     serverFarmId: plan.id
     httpsOnly: true
+    // KV references default to the System-assigned MI; we removed that, so
+    // point KV-reference resolution at the same user-assigned MI used for
+    // Cosmos / EG / IMDS auth. keyvault.bicep already granted it Secrets User.
+    keyVaultReferenceIdentity: userAssignedIdentityResourceId
     functionAppConfig: {
       deployment: {
         storage: {
@@ -142,6 +149,11 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
         { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsights.properties.ConnectionString }
         { name: 'AZURE_CLIENT_ID', value: userAssignedIdentityClientId }
         { name: 'CosmosAccountEndpoint', value: cosmosAccountEndpoint }
+        { name: 'EventGridTopicEndpoint', value: eventGridTopicEndpoint }
+        // Per-deploy KV reference: out-of-band-managed pepper used by ApiKeyHasher
+        // to verify project keys. The Function App's KV-ref resolver uses
+        // mi-notify-dev (see keyVaultReferenceIdentity above) which has Secrets User.
+        { name: 'ApiKeyPepperBase64', value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=api-key-pepper)' }
         { name: 'KEY_VAULT_NAME', value: keyVaultName }
         // DeviceApi (Notify.DeviceApi/DeviceApiOptions.cs) reads these via
         // ConfigureFunctionsWorkerDefaults binding. PushDelivery will consume
