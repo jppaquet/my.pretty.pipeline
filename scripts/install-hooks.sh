@@ -34,6 +34,7 @@ install_hook() {
 }
 
 install_hook pre-push
+install_hook pre-commit
 
 # Sanity: warn (don't fail) on missing tools so the user knows what their
 # next push will skip.

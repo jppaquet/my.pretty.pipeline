@@ -1,0 +1,29 @@
+#!/bin/sh
+# Block committing a non-empty NotifyFunctionKey in app/Notify/Info.plist.
+# The function key is a per-developer secret; the committed plist must carry
+# an empty placeholder and each dev pastes their own key locally.
+
+set -e
+
+PLIST="app/Notify/Info.plist"
+
+git diff --cached --name-only | grep -qxF "$PLIST" || exit 0
+
+STAGED=$(git show ":$PLIST" 2>/dev/null) || exit 0
+
+if printf '%s' "$STAGED" | tr -d '\n\r\t ' | grep -qE '<key>NotifyFunctionKey</key><string>[^<]+</string>'; then
+    cat >&2 <<'EOM'
+pre-commit: refusing to commit a non-empty NotifyFunctionKey.
+
+  file:   app/Notify/Info.plist
+  reason: per-developer secret, never commit it
+
+To proceed, stage everything *except* that line:
+
+  git restore --staged app/Notify/Info.plist
+  git add -p app/Notify/Info.plist     # skip the NotifyFunctionKey hunk
+
+Or temporarily blank the value, commit, then paste it back locally.
+EOM
+    exit 1
+fi

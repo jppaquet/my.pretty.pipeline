@@ -61,8 +61,9 @@
 		C4B297C0F94687AC3521C427 /* Notify.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Notify.entitlements; sourceTree = "<group>"; };
 		C4FA9B41297A7D4C6D12854D /* InboxViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = InboxViewModelTests.swift; sourceTree = "<group>"; };
 		D23F0E6DC6168C0AACCA5B02 /* AppContainer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppContainer.swift; sourceTree = "<group>"; };
+		D4815E342FAEC0D900EDB087 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		D68997227F497C102793DE05 /* DeviceRegistration.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DeviceRegistration.swift; sourceTree = "<group>"; };
-		E010CB5A3D3B243781800C5B /* Notify.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Notify.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E010CB5A3D3B243781800C5B /* Notify.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Notify.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -85,6 +86,7 @@
 		2964B37CBC4A179BC0AD2898 /* Notify */ = {
 			isa = PBXGroup;
 			children = (
+				D4815E342FAEC0D900EDB087 /* Info.plist */,
 				C4B297C0F94687AC3521C427 /* Notify.entitlements */,
 				BD5DCFE552797D390A02209F /* NotifyApp.swift */,
 				CF8EBFA72C093EBDF0E79B13 /* Features */,
@@ -103,7 +105,6 @@
 				73732EDF45A7432F3728B493 /* InboxView.swift */,
 				60831F704B520D6B292272D6 /* NotificationDetailView.swift */,
 			);
-			name = Inbox;
 			path = Inbox;
 			sourceTree = "<group>";
 		};
@@ -114,7 +115,6 @@
 				232DC4A73681CCD1BEA091AF /* NotifyAPI.swift */,
 				B14F7A1531FD9BB0DB1BB3BA /* PushRegistration.swift */,
 			);
-			name = Services;
 			path = Services;
 			sourceTree = "<group>";
 		};
@@ -134,7 +134,6 @@
 				6DB5753DB350C5079A045977 /* InboxNotification.swift */,
 				D68997227F497C102793DE05 /* DeviceRegistration.swift */,
 			);
-			name = Models;
 			path = Models;
 			sourceTree = "<group>";
 		};
@@ -418,12 +417,12 @@
 				CODE_SIGN_ENTITLEMENTS = Notify/Notify.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
+				INFOPLIST_FILE = Notify/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIBackgroundModes = "remote-notification";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_NotifyAPIBaseURL = "https://func-notify-dev-nrajdy.azurewebsites.net";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -442,12 +441,12 @@
 				CODE_SIGN_ENTITLEMENTS = Notify/Notify.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
+				INFOPLIST_FILE = Notify/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIBackgroundModes = "remote-notification";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_NotifyAPIBaseURL = "https://func-notify-dev-nrajdy.azurewebsites.net";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
