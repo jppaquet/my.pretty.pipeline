@@ -33,7 +33,20 @@ final class InboxViewModel {
         }
     }
 
-    func refresh() async { await load() }
+    // Don't delegate to load() — load() sets state = .loading, which flips
+    // InboxView's switch from .loaded (List) to .loading (ProgressView). The
+    // List unmounts mid-refresh, taking the .refreshable Task with it; the
+    // inflight URLSession.data(for:) call gets cancelled and the user sees
+    // "cancelled" in the failure banner. Keep the .loaded state alive across
+    // the fetch so the List stays mounted and the Task survives.
+    func refresh() async {
+        do {
+            let page = try await api.inbox(source: source, limit: pageSize, continuationToken: nil)
+            state = .loaded(items: page.items, continuationToken: page.continuationToken)
+        } catch {
+            state = .failed(message: Self.message(for: error))
+        }
+    }
 
     func loadMore() async {
         guard case .loaded(let items, let token?) = state else { return }
