@@ -1,5 +1,12 @@
 name: CodeQL
 
+# `run-name` shows up as each row's title in the Actions list. The same
+# workflow fires twice per merge cycle (once on the PR `pull_request` event,
+# once on the post-merge `push` to main); without this, both rows render as
+# "CodeQL" + the commit message and look like duplicates. Including the event
+# kind + ref makes each row self-describing.
+run-name: CodeQL · ${{ github.event_name }} · ${{ github.head_ref || github.ref_name }}
+
 # Replaces GitHub's "Default setup" for CodeQL. Default setup re-runs the full
 # autobuild (dotnet restore + build -c Release) on every push, doesn't cancel
 # stale runs, and ignores path filters — which is why a flurry of main merges
