@@ -28,6 +28,19 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      # ASC now mandates the iOS 26 SDK (Xcode 26) for any upload. The macos-15
+      # runner ships with multiple Xcodes; default is Xcode 16. Switch the
+      # active toolchain to Xcode_26.app before Archive.
+      - name: Select Xcode 26
+        run: |
+          if [ -d /Applications/Xcode_26.app ]; then
+            sudo xcode-select -s /Applications/Xcode_26.app
+          else
+            echo "Xcode_26.app not on this runner — listing available installs:" >&2
+            ls -d /Applications/Xcode*.app 2>&1 || true
+            exit 1
+          fi
+
       - name: Show Xcode version
         run: xcodebuild -version
 

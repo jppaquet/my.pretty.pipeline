@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0ABFAE7047C6969128CF3717 /* InboxNotification.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DB5753DB350C5079A045977 /* InboxNotification.swift */; };
+		A11C0117A55E751010000002 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A11C0117A55E751010000001 /* Assets.xcassets */; };
 		0BC72CD07DB41C379B2A2119 /* InboxViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 699977EE24AE54ECC7813AA2 /* InboxViewModel.swift */; };
 		2B0E8B5B8D2361F5C355569D /* InboxViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4FA9B41297A7D4C6D12854D /* InboxViewModelTests.swift */; };
 		46187D374E11114C3573F4AD /* KeychainStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D71DC7935F2A95C9D838192 /* KeychainStoreTests.swift */; };
@@ -61,6 +62,7 @@
 		C4B297C0F94687AC3521C427 /* Notify.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Notify.entitlements; sourceTree = "<group>"; };
 		C4FA9B41297A7D4C6D12854D /* InboxViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = InboxViewModelTests.swift; sourceTree = "<group>"; };
 		D23F0E6DC6168C0AACCA5B02 /* AppContainer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppContainer.swift; sourceTree = "<group>"; };
+		A11C0117A55E751010000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		D4815E342FAEC0D900EDB087 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		D68997227F497C102793DE05 /* DeviceRegistration.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DeviceRegistration.swift; sourceTree = "<group>"; };
 		E010CB5A3D3B243781800C5B /* Notify.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Notify.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -86,6 +88,7 @@
 		2964B37CBC4A179BC0AD2898 /* Notify */ = {
 			isa = PBXGroup;
 			children = (
+				A11C0117A55E751010000001 /* Assets.xcassets */,
 				D4815E342FAEC0D900EDB087 /* Info.plist */,
 				C4B297C0F94687AC3521C427 /* Notify.entitlements */,
 				BD5DCFE552797D390A02209F /* NotifyApp.swift */,
@@ -206,6 +209,7 @@
 			buildConfigurationList = 61DDAD5B4DE5CDAE7E17FEAE /* Build configuration list for PBXNativeTarget "Notify" */;
 			buildPhases = (
 				760736BDE75AA8C9103D1F3B /* Sources */,
+				A11C0117A55E751010000003 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -253,6 +257,17 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A11C0117A55E751010000003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A11C0117A55E751010000002 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		32BCFC36B47F4108F4DCC973 /* Sources */ = {
@@ -419,6 +434,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = U87K2QA362;
 				INFOPLIST_FILE = Notify/Info.plist;
+				INFOPLIST_KEY_CFBundleIconName = AppIcon;
 				INFOPLIST_KEY_LSApplicationCategoryType = "";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -444,6 +460,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = U87K2QA362;
 				INFOPLIST_FILE = Notify/Info.plist;
+				INFOPLIST_KEY_CFBundleIconName = AppIcon;
 				INFOPLIST_KEY_LSApplicationCategoryType = "";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
