@@ -417,6 +417,7 @@
 				CODE_SIGN_ENTITLEMENTS = Notify/Notify.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = U87K2QA362;
 				INFOPLIST_FILE = Notify/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -441,6 +442,7 @@
 				CODE_SIGN_ENTITLEMENTS = Notify/Notify.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = U87K2QA362;
 				INFOPLIST_FILE = Notify/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
