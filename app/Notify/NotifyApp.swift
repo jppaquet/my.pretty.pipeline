@@ -18,6 +18,24 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        // Ask the user once on first launch. iOS remembers the answer; subsequent
+        // launches return the cached decision without re-prompting. If granted,
+        // ask APNs for a device token — that fires
+        // `didRegisterForRemoteNotificationsWithDeviceToken` which POSTs to
+        // /v1/devices and creates an Installation in Notification Hubs.
+        Task { @MainActor in
+            do {
+                let granted = try await UNUserNotificationCenter.current()
+                    .requestAuthorization(options: [.alert, .badge, .sound])
+                if granted {
+                    application.registerForRemoteNotifications()
+                } else {
+                    NSLog("User declined notification permission — push delivery disabled")
+                }
+            } catch {
+                NSLog("requestAuthorization failed: %@", String(describing: error))
+            }
+        }
         return true
     }
 
