@@ -21,6 +21,29 @@ enum Priority: String, Codable, Hashable {
     case low, normal, high
 }
 
+extension InboxNotification {
+    static func mock(
+        id: String,
+        source: String,
+        title: String,
+        body: String,
+        type: String = "info",
+        priority: Priority = .normal,
+        tags: [String]? = nil,
+        deeplink: URL? = nil,
+        deduplicationKey: String? = nil,
+        timestamp: Date,
+        envelopeId: String? = nil
+    ) -> InboxNotification {
+        InboxNotification(
+            id: id, source: source, title: title, body: body,
+            type: type, priority: priority, tags: tags,
+            deeplink: deeplink, deduplicationKey: deduplicationKey,
+            timestamp: timestamp, envelopeId: envelopeId ?? "env-\(id)"
+        )
+    }
+}
+
 // Inbox page response from `GET /v1/inbox`.
 struct InboxPage: Decodable {
     let items: [InboxNotification]

@@ -11,6 +11,14 @@ final class InboxViewModel {
         case failed(message: String)
     }
 
+    enum Grouping: String, CaseIterable {
+        case none = "List"
+        case day = "By Day"
+        case project = "By Project"
+    }
+
+    var grouping: Grouping = .none
+
     private(set) var state: State = .idle
 
     private let api: NotifyAPI

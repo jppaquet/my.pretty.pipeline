@@ -152,36 +152,34 @@ final class MockNotifyAPI: NotifyAPI {
     // `inbox.row.ui-test-1` on both iPhone and iPad destinations.
     static func uiTestSeeded() -> MockNotifyAPI {
         let mock = MockNotifyAPI()
-        mock.pages = [
-            InboxPage(items: [
-                InboxNotification(
-                    id: "ui-test-1",
-                    source: "home-pipeline",
-                    title: "Backup failed",
-                    body: "rsync exited 12 on pi-01",
-                    type: "alert",
-                    priority: .high,
-                    tags: ["pi-01"],
-                    deeplink: nil,
-                    deduplicationKey: nil,
-                    timestamp: Date(timeIntervalSince1970: 1_730_000_000),
-                    envelopeId: "ui-test-env-1"
-                ),
-                InboxNotification(
-                    id: "ui-test-2",
-                    source: "cron",
-                    title: "Weekly cleanup ok",
-                    body: "200 files removed",
-                    type: "info",
-                    priority: .normal,
-                    tags: nil,
-                    deeplink: nil,
-                    deduplicationKey: nil,
-                    timestamp: Date(timeIntervalSince1970: 1_730_001_000),
-                    envelopeId: "ui-test-env-2"
-                ),
-            ], continuationToken: nil),
-        ]
+        let now = Date()
+        let cal = Calendar.current
+        let yesterday = cal.date(byAdding: .day, value: -1, to: now) ?? now
+        let twoDaysAgo = cal.date(byAdding: .day, value: -2, to: now) ?? now
+
+        mock.pages = [InboxPage(items: [
+            .mock(id: "ui-test-1", source: "home-pipeline", title: "Backup failed",
+                  body: "**rsync** exited `12` on **pi-01** — check `df -h` output",
+                  priority: .high, tags: ["pi-01"], timestamp: now),
+            .mock(id: "today-2", source: "build-system", title: "PR #142 merged",
+                  body: "Branch `feature/apns-rewrite` merged into `main` by **jpp**",
+                  priority: .normal, tags: ["ci", "merged"],
+                  deeplink: URL(string: "https://github.com/jpp/my.pretty.pipeline/pull/142"),
+                  timestamp: cal.date(byAdding: .hour, value: -2, to: now) ?? now),
+            .mock(id: "today-3", source: "staging-deploy", title: "Deployment succeeded",
+                  body: "> Rollout completed in **42 s**\n- 3 pods updated\n- 0 restarts",
+                  priority: .normal, tags: ["deploy", "staging"],
+                  timestamp: cal.date(byAdding: .hour, value: -4, to: now) ?? now),
+            .mock(id: "yesterday-1", source: "cron", title: "Weekly cleanup ok",
+                  body: "200 files removed from `~/Downloads`", timestamp: yesterday),
+            .mock(id: "yesterday-2", source: "build-system", title: "Nightly tests passed",
+                  body: "All **847** tests green on `main`",
+                  priority: .low, tags: ["ci"],
+                  timestamp: cal.date(byAdding: .hour, value: -3, to: yesterday) ?? yesterday),
+            .mock(id: "2days-1", source: "home-pipeline", title: "Disk space warning",
+                  body: "NAS `/volume1` is **87 %** full",
+                  priority: .high, tags: ["nas", "storage"], timestamp: twoDaysAgo),
+        ], continuationToken: nil)]
         return mock
     }
 }
