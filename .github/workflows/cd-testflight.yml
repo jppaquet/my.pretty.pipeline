@@ -20,6 +20,7 @@ jobs:
       APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
       APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
       APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+      NOTIFY_FUNCTION_KEY: ${{ secrets.NOTIFY_FUNCTION_KEY }}
       MARKETING_VERSION: ${{ github.ref_name }}
       # github.run_number is monotonic per workflow, which is what TestFlight
       # needs in CFBundleVersion (re-uploading the same number is rejected).
@@ -51,6 +52,22 @@ jobs:
           mkdir -p "$HOME/.appstoreconnect/private_keys"
           # `~` doesn't expand inside double quotes; use $HOME explicitly.
           echo "$APP_STORE_CONNECT_API_KEY_P8" > "$HOME/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8"
+
+      # Source-of-truth Info.plist commits NotifyFunctionKey as an empty
+      # placeholder (per-developer paste-in for local builds, scripts/pre-commit
+      # blocks staging any non-empty value). For TestFlight builds we need the
+      # real Function-level key embedded in the IPA, so patch the plist before
+      # archive from the NOTIFY_FUNCTION_KEY repo secret. PlistBuddy edits the
+      # value in place; xcodebuild reads it via INFOPLIST_FILE during archive.
+      - name: Inject NotifyFunctionKey from secret
+        run: |
+          if [ -z "$NOTIFY_FUNCTION_KEY" ]; then
+            echo "NOTIFY_FUNCTION_KEY secret is empty — TestFlight build would 401 on every API call" >&2
+            exit 1
+          fi
+          /usr/libexec/PlistBuddy -c "Set :NotifyFunctionKey $NOTIFY_FUNCTION_KEY" Notify/Info.plist
+          LEN=$(/usr/libexec/PlistBuddy -c "Print :NotifyFunctionKey" Notify/Info.plist | wc -c | tr -d ' ')
+          echo "NotifyFunctionKey injected (length=$LEN)"
 
       - name: Archive
         run: |
