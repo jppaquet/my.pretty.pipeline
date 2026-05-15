@@ -22,6 +22,9 @@ param enableArchiveSubscription bool = false
 @description('Phase 2+: provision the push subscription. Requires the `push` function to exist in the Function App.')
 param enablePushSubscription bool = false
 
+@description('Principal IDs to grant EventGrid Data Sender on this topic so they can publish CloudEvents via DefaultAzureCredential. Required for the Ingest function — without it, publish fails with Azure.RequestFailedException: The principal does not have permission to send data.')
+param dataSenderPrincipalIds array = []
+
 resource topic 'Microsoft.EventGrid/topics@2024-06-01-preview' = {
   name: 'egt-${namePrefix}-${env}'
   location: location
@@ -72,6 +75,18 @@ resource subPush 'Microsoft.EventGrid/topics/eventSubscriptions@2024-06-01-previ
     retryPolicy: { maxDeliveryAttempts: 30, eventTimeToLiveInMinutes: 1440 }
   }
 }
+
+// EventGrid Data Sender (built-in role id d5a91429-5739-47e2-a06b-3470a27159e7) —
+// scoped to the topic so the principal can only publish to this specific topic.
+resource dataSender 'Microsoft.Authorization/roleAssignments@2022-04-01' = [for principalId in dataSenderPrincipalIds: {
+  scope: topic
+  name: guid(topic.id, principalId, 'd5a91429-5739-47e2-a06b-3470a27159e7')
+  properties: {
+    principalId: principalId
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'd5a91429-5739-47e2-a06b-3470a27159e7')
+    principalType: 'ServicePrincipal'
+  }
+}]
 
 output topicName string = topic.name
 output topicEndpoint string = topic.properties.endpoint
