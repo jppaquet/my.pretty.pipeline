@@ -124,6 +124,12 @@ module eventgrid 'modules/eventgrid.bicep' = {
     functionAppName: functions.outputs.functionAppName
     enableArchiveSubscription: enableArchiveSubscription
     enablePushSubscription: enablePushSubscription
+    // Grant the Function App runtime identity EventGrid Data Sender on this
+    // topic. The Ingest function publishes via `new EventGridPublisherClient(
+    // uri, new DefaultAzureCredential())`, which token-auths against the topic.
+    dataSenderPrincipalIds: [
+      mi.properties.principalId
+    ]
   }
 }
 
