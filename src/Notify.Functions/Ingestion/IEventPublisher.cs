@@ -20,11 +20,21 @@ public sealed class EventGridEventPublisher : IEventPublisher
 
     public Task PublishAsync(CloudEventEnvelope envelope, CancellationToken ct = default)
     {
-        var ce = new CloudEvent(envelope.Source, envelope.Type, BinaryData.FromObjectAsJson(envelope.Data, NotifyJson.Options))
+        // The 3-arg CloudEvent(source, type, object) ctor binds to the
+        // (source, type, object, Type?) overload and *throws* at runtime when it
+        // sees the object is a BinaryData: "This constructor does not support
+        // BinaryData. Use the constructor that takes a BinaryData instance."
+        // Use the explicit 4-arg BinaryData overload — dataContentType is
+        // required so the broker tags the event correctly.
+        var ce = new CloudEvent(
+            envelope.Source,
+            envelope.Type,
+            BinaryData.FromObjectAsJson(envelope.Data, NotifyJson.Options),
+            "application/json",
+            CloudEventDataFormat.Json)
         {
             Id = envelope.Id,
             Time = envelope.Time,
-            DataSchema = envelope.DataContentType,
         };
         return _client.SendEventAsync(ce, ct);
     }
