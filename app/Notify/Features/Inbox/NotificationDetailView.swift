@@ -3,6 +3,16 @@ import SwiftUI
 struct NotificationDetailView: View {
     let notification: InboxNotification
 
+    private var attributedBody: AttributedString {
+        (try? AttributedString(
+            markdown: notification.body,
+            options: AttributedString.MarkdownParsingOptions(
+                interpretedSyntax: .full,
+                failurePolicy: .returnPartiallyParsedIfPossible
+            )
+        )) ?? AttributedString(notification.body)
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -17,7 +27,7 @@ struct NotificationDetailView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-                Text(notification.body)
+                Text(attributedBody)
                     .font(.body)
 
                 if let deeplink = notification.deeplink {
