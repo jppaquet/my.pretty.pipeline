@@ -11,6 +11,13 @@ producer ──► IngestionApi ──► Event Grid ─┤
                                           └──► Archive ───────► Cosmos DB ◄────────────── InboxApi
 ```
 
+## Auth model
+
+Two independent boundaries:
+
+- **Producers** authenticate to `/v1/notifications` with per-project API keys (`npk_…`, Argon2id-hashed). Producers are scripts/cron/CI.
+- **iOS app** authenticates to `/v1/inbox` and `/v1/devices` with **Sign in with Apple** end-to-end. The IPA carries no backend credential; the user's Apple identity token is the only client auth header. Each user's inbox is partitioned by their Apple `sub`.
+
 ## Producing
 
 Anything that speaks JSON over HTTPS:
@@ -38,7 +45,7 @@ Fits inside free tiers. Target monthly bill: under a coffee.
 
 ## Status
 
-Phase 2 backend done (ingestion + archive + push fan-out + device registration). APNs `.p8` upload + iOS app are the remaining gates to actual on-device push.
+Phases 0–3 done end-to-end on the dev RG: ingestion, archive, push fan-out, per-user inbox, and iOS Sign-in-with-Apple auth. Backend MI-only for Storage/Cosmos/EventGrid (shared keys disabled); KV-resolved secrets; OIDC federation locked to `:ref:refs/heads/main`.
 
 ## Local dev
 
@@ -48,6 +55,14 @@ docker compose up -d            # Azurite + Cosmos emulator + EG stub
 cd src && dotnet test
 open app/Notify.xcodeproj
 ```
+
+## Forking?
+
+See [docs/FORK-SETUP.md](docs/FORK-SETUP.md) — a step-by-step walkthrough that takes you from `gh repo fork` to a working notification, including the Apple Developer + Azure + GitHub + iOS-signing pieces.
+
+- [docs/DEPLOY.md](docs/DEPLOY.md) — day-2 ops
+- [docs/SCHEMA.md](docs/SCHEMA.md) — producer + inbox API contract
+- [docs/PROJECT-ONBOARDING.md](docs/PROJECT-ONBOARDING.md) — mint a producer key
 
 ---
 

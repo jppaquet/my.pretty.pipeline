@@ -1,5 +1,11 @@
 # Onboarding a new producing project
 
+This doc is for **adding a producer** (a script, cron job, CI pipeline that
+publishes notifications). If you're standing up the whole stack from a
+fresh fork, start with [FORK-SETUP.md](FORK-SETUP.md) first — that walks
+the Apple Developer + Azure + GitHub steps; this doc takes over once your
+backend is live.
+
 Phase 1+ ships an admin endpoint for this. Until then, mint a key by hand:
 
 ```sh
