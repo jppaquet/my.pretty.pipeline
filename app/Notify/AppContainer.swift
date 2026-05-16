@@ -22,14 +22,21 @@ final class AppContainer {
     // function key — useful so a user can paste a key on first launch via a
     // settings sheet instead of baking it into the build.
     static func makeDefault() -> AppContainer {
-        let keychain = KeychainStore()
-
         // UI tests run hermetically against a mock backend pre-seeded with
         // stable IDs so XCUITest can locate `inbox.row.ui-test-1` on both
-        // iPhone (compact) and iPad (regular) destinations.
+        // iPhone (compact) and iPad (regular) destinations. Use an in-memory
+        // keychain pre-seeded with stub SiwA credentials: on the simulator
+        // the real KeychainStore returns errSecMissingEntitlement (-34018)
+        // so a silent `try? keychain.save` would leave the SiwA gate empty
+        // and SignInView would block the inbox under test.
         if ProcessInfo.processInfo.arguments.contains("-NotifyUITestMockBackend") {
+            let keychain = InMemoryKeychainStore()
+            try? keychain.save("ui-test-stub-jwt", forKey: KeychainKey.appleIdentityToken)
+            try? keychain.save("ui-test-stub-user", forKey: KeychainKey.appleUserIdentifier)
             return AppContainer(api: MockNotifyAPI.uiTestSeeded(), keychain: keychain)
         }
+
+        let keychain = KeychainStore()
 
         let plistURL = Bundle.main.object(forInfoDictionaryKey: "NotifyAPIBaseURL") as? String
         // swiftlint:disable force_unwrapping
@@ -40,7 +47,11 @@ final class AppContainer {
         let plistKey = Bundle.main.object(forInfoDictionaryKey: "NotifyFunctionKey") as? String
         let functionKey = keychain.load(forKey: KeychainKey.functionKey) ?? plistKey ?? ""
 
-        let api = NotifyAPIClient(baseURL: baseURL, functionKey: functionKey)
+        // Resolves the JWT at call time so a sign-in / sign-out mid-session is
+        // picked up by the next request without rebuilding the API client.
+        let bearer: BearerTokenProvider = { keychain.load(forKey: KeychainKey.appleIdentityToken) }
+
+        let api = NotifyAPIClient(baseURL: baseURL, functionKey: functionKey, bearer: bearer)
         return AppContainer(api: api, keychain: keychain)
     }
 }
