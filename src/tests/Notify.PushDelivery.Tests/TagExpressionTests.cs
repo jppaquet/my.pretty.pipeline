@@ -11,10 +11,10 @@ public class TagExpressionTests
     }
 
     [Fact]
-    public void Extra_tags_appended_after_global()
+    public void Extra_tags_namespaced_with_source_prefix()
     {
         Assert.Equal(
-            "source:home-pipeline || global || urgent || backup",
+            "source:home-pipeline || global || tag:home-pipeline:urgent || tag:home-pipeline:backup",
             TagExpression.For("home-pipeline", new[] { "urgent", "backup" }));
     }
 
@@ -22,8 +22,20 @@ public class TagExpressionTests
     public void Empty_extra_tag_skipped()
     {
         Assert.Equal(
-            "source:home-pipeline || global || keep",
+            "source:home-pipeline || global || tag:home-pipeline:keep",
             TagExpression.For("home-pipeline", new[] { "", "  ", "keep" }));
+    }
+
+    [Fact]
+    public void Producer_cannot_target_another_sources_subscribers()
+    {
+        // A producer authenticated for `acme` submits a tag that would, without
+        // namespacing, match installations subscribed to `source:rival`.
+        // After namespacing, the clause becomes `tag:acme:source:rival` — which
+        // matches nothing in the rival's subscription set.
+        var expr = TagExpression.For("acme", new[] { "source:rival" });
+        Assert.Contains("tag:acme:source:rival", expr);
+        Assert.DoesNotContain(" || source:rival", expr);
     }
 
     [Fact]
