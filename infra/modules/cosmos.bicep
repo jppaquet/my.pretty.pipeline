@@ -106,6 +106,22 @@ resource projects 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers
   }
 }
 
+// User allowlist (sub → approved boolean). JwtAuthMiddleware reads this on
+// every authenticated request; an admin flips `approved: true` in Cosmos Data
+// Explorer to enroll a tester. First sign-in self-registers a `approved:false`
+// row, so there is no log-scraping or restart cycle. Partitioned by /id (sub)
+// for O(1) point reads.
+resource allowedUsers 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-05-15' = {
+  parent: db
+  name: 'allowedUsers'
+  properties: {
+    resource: {
+      id: 'allowedUsers'
+      partitionKey: { paths: [ '/id' ], kind: 'Hash' }
+    }
+  }
+}
+
 resource dataContributor 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-05-15' = [for principalId in dataContributorPrincipalIds: {
   parent: account
   name: guid(account.id, principalId, '00000000-0000-0000-0000-000000000002')
