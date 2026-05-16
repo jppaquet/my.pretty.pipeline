@@ -24,6 +24,9 @@
 		EADE2E9AE07F8CC5F17CD34F /* DeviceRegistration.swift in Sources */ = {isa = PBXBuildFile; fileRef = D68997227F497C102793DE05 /* DeviceRegistration.swift */; };
 		EE89978EC81926FF8D0872B7 /* InboxFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F1F24958CC7920D0255D9C2 /* InboxFlowTests.swift */; };
 		FC3CF4BBA2E756A31287713F /* AppContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D23F0E6DC6168C0AACCA5B02 /* AppContainer.swift */; };
+		AE6B2C3F19A874CB05D8E201 /* AuthViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE6B2C3F19A874CB05D8E102 /* AuthViewModel.swift */; };
+		B72D8E4A91FC36B708EF0301 /* SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B72D8E4A91FC36B708EF0203 /* SignInView.swift */; };
+		D95E3F6CA3BE58D70A010606 /* AuthViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D95E3F6CA3BE58D70A010505 /* AuthViewModelTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -66,6 +69,9 @@
 		D4815E342FAEC0D900EDB087 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		D68997227F497C102793DE05 /* DeviceRegistration.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DeviceRegistration.swift; sourceTree = "<group>"; };
 		E010CB5A3D3B243781800C5B /* Notify.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Notify.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AE6B2C3F19A874CB05D8E102 /* AuthViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AuthViewModel.swift; sourceTree = "<group>"; };
+		B72D8E4A91FC36B708EF0203 /* SignInView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SignInView.swift; sourceTree = "<group>"; };
+		D95E3F6CA3BE58D70A010505 /* AuthViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AuthViewModelTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -147,6 +153,7 @@
 				2F321D843CB72A4C3EC33F22 /* NotifyAPICodableTests.swift */,
 				7D71DC7935F2A95C9D838192 /* KeychainStoreTests.swift */,
 				668E4C3D4CD3F8014C92AF48 /* PushPayloadParserTests.swift */,
+				D95E3F6CA3BE58D70A010505 /* AuthViewModelTests.swift */,
 			);
 			path = NotifyTests;
 			sourceTree = "<group>";
@@ -165,8 +172,18 @@
 			isa = PBXGroup;
 			children = (
 				3359DF727E8FFCBD8790A2B9 /* Inbox */,
+				C84F9D5B82AD47C609F00404 /* Auth */,
 			);
 			path = Features;
+			sourceTree = "<group>";
+		};
+		C84F9D5B82AD47C609F00404 /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				AE6B2C3F19A874CB05D8E102 /* AuthViewModel.swift */,
+				B72D8E4A91FC36B708EF0203 /* SignInView.swift */,
+			);
+			path = Auth;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -293,6 +310,8 @@
 				66126393E25D006C3A604F36 /* InboxView.swift in Sources */,
 				8CAC0C8B804AA983E4C9636A /* NotificationDetailView.swift in Sources */,
 				FC3CF4BBA2E756A31287713F /* AppContainer.swift in Sources */,
+				AE6B2C3F19A874CB05D8E201 /* AuthViewModel.swift in Sources */,
+				B72D8E4A91FC36B708EF0301 /* SignInView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -304,6 +323,7 @@
 				8017EBF41BA0D0303A2DABD5 /* NotifyAPICodableTests.swift in Sources */,
 				46187D374E11114C3573F4AD /* KeychainStoreTests.swift in Sources */,
 				7CAB3BB4C49B2DB7C83CAD75 /* PushPayloadParserTests.swift in Sources */,
+				D95E3F6CA3BE58D70A010606 /* AuthViewModelTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
