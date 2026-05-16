@@ -68,6 +68,10 @@ module cosmos 'modules/cosmos.bicep' = {
 }
 
 // Key Vault — secrets store (APNs .p8, NH conn str, API-key HMAC pepper).
+// The MI is both the runtime reader (`accessReaderPrincipalIds`) and the
+// deploy-time writer (`secretsOfficerPrincipalIds`) so this template can
+// declaratively write deploy-time-derived secrets (NH conn string) without a
+// separate post-deploy `az keyvault secret set` step.
 module keyvault 'modules/keyvault.bicep' = {
   name: 'keyvault-${env}'
   params: {
@@ -78,8 +82,19 @@ module keyvault 'modules/keyvault.bicep' = {
     accessReaderPrincipalIds: [
       mi.properties.principalId
     ]
+    secretsOfficerPrincipalIds: [
+      mi.properties.principalId
+    ]
+    deploySecrets: {
+      // NH connection string is derived from the hub at deploy time but the
+      // value carries Manage rights. Keep it in KV so it isn't readable via
+      // `Microsoft.Web/sites/config/list` against the Function App.
+      'notification-hub-connection-string': notificationHub.outputs.hubConnectionString
+    }
   }
 }
+
+var notificationHubConnectionStringSecretName = 'notification-hub-connection-string'
 
 // Notification Hubs Free tier — namespace + hub. The connection string is
 // consumed by the Function App as an app setting (DeviceApi for installation
@@ -106,10 +121,11 @@ module functions 'modules/functions.bicep' = {
     cosmosAccountEndpoint: cosmos.outputs.endpoint
     keyVaultName: keyvault.outputs.vaultName
     eventGridTopicEndpoint: eventGridTopicEndpoint
-    notificationHubConnectionString: notificationHub.outputs.hubConnectionString
+    notificationHubConnectionStringSecretName: notificationHubConnectionStringSecretName
     notificationHubName: notificationHub.outputs.hubName
     userAssignedIdentityResourceId: mi.id
     userAssignedIdentityClientId: mi.properties.clientId
+    userAssignedIdentityPrincipalId: mi.properties.principalId
   }
 }
 
