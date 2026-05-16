@@ -49,6 +49,16 @@ swap. Publish lands directly on production. For solo/dev that's fine; if you
 ever add real users, gate writes behind a feature flag and validate with e2e
 before flipping the flag.
 
+## First deploy after bootstrap
+
+`cd-deploy` writes a few KV secrets declaratively (the Notification Hub
+connection string is derived from the deployed NH at template time) and grants
+the deploy MI `Storage Blob Data Owner` + `Key Vault Secrets Officer` on
+brand-new resources. Azure RBAC propagation is usually <60 s but occasionally
+straggles. If the **first** `cd-deploy` run on a freshly-bootstrapped RG fails
+with `AuthorizationFailed` on a KV or storage write, just re-run the workflow —
+the second run sees the propagated roles and goes through. Re-runs are idempotent.
+
 ## Hard-won lessons
 
 - **Linux Consumption (Y1) cannot run .NET 10.** The `linuxFxVersion` string is
