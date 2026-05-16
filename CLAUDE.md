@@ -21,7 +21,7 @@ infra/main.bicep                  cd-deploy template
 infra/modules/                    one bicep per Azure resource
 infra/modules/github-oidc.bicep   bootstrap-only — NOT in main.bicep
 app/Notify.xcodeproj/             Xcode project (open directly)
-docs/                             SCHEMA, DEPLOY, PROJECT-ONBOARDING
+docs/                             SCHEMA, DEPLOY, PROJECT-ONBOARDING, FORK-SETUP
 ```
 
 ## Commands

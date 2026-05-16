@@ -1,4 +1,8 @@
-# Deploy
+# Deploy — day-2
+
+First-time setup (Apple Developer + Azure RG + GitHub vars + iOS signing)
+lives in [FORK-SETUP.md](FORK-SETUP.md). This doc is the day-2 reference for
+how `cd-deploy.yml` works against an already-bootstrapped RG.
 
 ## One-time bootstrap (per Azure subscription)
 
@@ -95,6 +99,12 @@ Set these as **secrets** (sensitive) in the repo:
 | `APP_STORE_CONNECT_API_KEY_ID` | App Store Connect API key id (10 chars) |
 | `APP_STORE_CONNECT_API_ISSUER_ID` | Issuer id (UUID) |
 | `APP_STORE_CONNECT_API_KEY_P8` | Full `.p8` file contents |
+
+The iOS bundle no longer carries a backend credential (the legacy
+`NOTIFY_FUNCTION_KEY` secret was retired in PR-C). Auth is Sign in with
+Apple end-to-end — the user signs in on first launch and the identity
+token (JWT) lands in the Keychain. See [SCHEMA.md](SCHEMA.md) for the
+inbox + register-device contract.
 
 Then tag a release: `git tag v0.1.0 && git push --tags` → `cd-testflight.yml`
 archives + uploads.
