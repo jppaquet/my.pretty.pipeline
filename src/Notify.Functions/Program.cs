@@ -2,11 +2,13 @@ using Azure.Identity;
 using Azure.Messaging.EventGrid;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Azure.NotificationHubs;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Notify.Functions.Archive;
+using Notify.Functions.Auth;
 using Notify.Functions.Devices;
 using Notify.Functions.Inbox;
 using Notify.Functions.Ingestion;
@@ -20,7 +22,12 @@ using Notify.Shared.Json;
 // NotificationHubClient) once and the per-feature handlers on top.
 
 var host = new HostBuilder()
-    .ConfigureFunctionsWorkerDefaults()
+    .ConfigureFunctionsWorkerDefaults(worker =>
+    {
+        // JWT validation runs on every HTTP request. See JwtAuthMiddleware
+        // for the additive-then-required rollout plan.
+        worker.UseMiddleware<JwtAuthMiddleware>();
+    })
     .ConfigureServices((ctx, services) =>
     {
         services.AddOptions<IngestionOptions>().Bind(ctx.Configuration);
@@ -28,6 +35,7 @@ var host = new HostBuilder()
         services.AddOptions<DevicesOptions>().Bind(ctx.Configuration);
         services.AddOptions<PushOptions>().Bind(ctx.Configuration);
         services.AddOptions<InboxOptions>().Bind(ctx.Configuration);
+        services.AddOptions<AuthOptions>().Bind(ctx.Configuration.GetSection("Auth"));
 
         // Single CosmosClient — both Ingestion (project lookup) and Archive
         // (notifications upsert) share it. Endpoint comes from IngestionOptions
@@ -94,6 +102,14 @@ var host = new HostBuilder()
         // ── Push ─────────────────────────────────────────────────────────
         services.AddSingleton<INotificationSender, NotificationHubSender>();
         services.AddSingleton<PushHandler>();
+
+        // ── Auth (Sign in with Apple) ────────────────────────────────────
+        // HttpClient + memory cache for the JWKS fetcher; AppleJwtValidator is
+        // stateless and depends only on those. The middleware resolves the
+        // validator per request via FunctionContext.InstanceServices.
+        services.AddMemoryCache();
+        services.AddHttpClient<IAppleJwksProvider, AppleJwksProvider>();
+        services.AddSingleton<AppleJwtValidator>();
     })
     .Build();
 

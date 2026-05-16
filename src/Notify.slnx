@@ -6,6 +6,7 @@
     <Project Path="tests/Notify.Inbox.Tests/Notify.Inbox.Tests.csproj" />
     <Project Path="tests/Notify.DeviceApi.Tests/Notify.DeviceApi.Tests.csproj" />
     <Project Path="tests/Notify.PushDelivery.Tests/Notify.PushDelivery.Tests.csproj" />
+    <Project Path="tests/Notify.Auth.Tests/Notify.Auth.Tests.csproj" />
     <Project Path="tests/Notify.E2E/Notify.E2E.csproj" />
   </Folder>
   <Project Path="Notify.Shared/Notify.Shared.csproj" />
