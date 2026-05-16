@@ -13,12 +13,22 @@ public static class NotifyCreatedV1Validator
     public const int MetadataMaxBytes = 4 * 1024;
     public const int TagsMaxCount = 10;
     public const int TagMaxChars = 64;
+    public const int DeeplinkMaxChars = 2048;
 
     // Producer tags become NH tag-expression clauses (see Push/TagExpression).
     // Restricting to [A-Za-z0-9._-] keeps every NH boolean operator (| & ! ( ) :
     // whitespace) out of the clause, preventing a producer from forging
     // additional clauses or matching platform-owned clauses like `source:<x>`.
     private static readonly Regex TagPattern = new(@"\A[A-Za-z0-9._-]+\z", RegexOptions.Compiled);
+
+    // Deeplink schemes the iOS client may open. `https` reaches the system
+    // browser; `notify` is the app's own custom URL type (see iOS
+    // Info.plist CFBundleURLTypes). Anything else — `tel:` `sms:`
+    // `facetime:` `mailto:` `javascript:` `<otherapp>://...` — gives a
+    // producer a way to dial premium-rate numbers, pre-fill SMS, or
+    // deep-link into third-party apps via the system handler.
+    private static readonly HashSet<string> AllowedDeeplinkSchemes =
+        new(StringComparer.OrdinalIgnoreCase) { "https", "notify" };
 
     public static ValidationResult Validate(NotifyCreatedV1 input)
     {
@@ -43,6 +53,16 @@ public static class NotifyCreatedV1Validator
             var bytes = Encoding.UTF8.GetByteCount(serialized);
             if (bytes > MetadataMaxBytes)
                 failures.Add(new("metadata", $"max {MetadataMaxBytes} bytes serialized, was {bytes}"));
+        }
+
+        if (!string.IsNullOrEmpty(input.Deeplink))
+        {
+            if (input.Deeplink.Length > DeeplinkMaxChars)
+                failures.Add(new("deeplink", $"max {DeeplinkMaxChars} chars"));
+            else if (!Uri.TryCreate(input.Deeplink, UriKind.Absolute, out var uri))
+                failures.Add(new("deeplink", "must be an absolute URI"));
+            else if (!AllowedDeeplinkSchemes.Contains(uri.Scheme))
+                failures.Add(new("deeplink", $"scheme '{uri.Scheme}' not allowed; use https or notify"));
         }
 
         if (input.Tags is { Count: > 0 } tags)

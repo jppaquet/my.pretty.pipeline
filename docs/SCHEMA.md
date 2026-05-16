@@ -21,7 +21,7 @@ non-.NET producers (cron scripts, shell hooks, Python, JS, etc.).
   "body": "rsync exited 12 on host pi-01",  // required, ≤2000 chars
   "priority": "high",                 // low | normal | high (default: normal)
   "tags": ["pi-01", "backup"],        // optional, ≤10, each ≤64 chars, [A-Za-z0-9._-]; "global" reserved
-  "deeplink": "https://...",          // optional
+  "deeplink": "https://...",          // optional, scheme ∈ {https, notify}, ≤2048 chars
   "metadata": { "host": "pi-01" },    // optional, free-form, ≤4 KB serialized
   "deduplicationKey": "backup-2026-04-28",  // optional; same key within TTL = idempotent
   "timestamp": "2026-04-28T14:00:00Z" // optional, server fills if missing
