@@ -40,7 +40,7 @@ public class PushHandlerTests
         await handler.HandleAsync(EnvelopeFor("home-pipeline", tags: new[] { "urgent" }));
 
         var sent = Assert.Single(sender.Sent);
-        Assert.Equal("source:home-pipeline || global || urgent", sent.TagExpression);
+        Assert.Equal("source:home-pipeline || global || tag:home-pipeline:urgent", sent.TagExpression);
     }
 
     [Fact]

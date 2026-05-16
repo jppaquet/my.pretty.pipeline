@@ -96,4 +96,77 @@ public class NotifyCreatedV1ValidatorTests
         };
         Assert.True(NotifyCreatedV1Validator.Validate(input).IsValid);
     }
+
+    [Theory]
+    [InlineData("pi-01")]
+    [InlineData("ABC.def_123")]
+    [InlineData("a")]
+    public void Tag_with_allowed_charset_passes(string tag)
+    {
+        var input = Valid() with { Tags = new[] { tag } };
+        Assert.True(NotifyCreatedV1Validator.Validate(input).IsValid);
+    }
+
+    [Theory]
+    [InlineData("source:rival")]      // colon — would forge an NH clause
+    [InlineData("a || b")]             // boolean operator
+    [InlineData("a && b")]
+    [InlineData("!negate")]
+    [InlineData("(grouped)")]
+    [InlineData("space tag")]
+    [InlineData("tab\ttag")]
+    public void Tag_with_operator_chars_fails(string tag)
+    {
+        var input = Valid() with { Tags = new[] { tag } };
+        var result = NotifyCreatedV1Validator.Validate(input);
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Failures, f => f.Field.StartsWith("tags["));
+    }
+
+    [Theory]
+    [InlineData("global")]
+    [InlineData("Global")]
+    [InlineData("GLOBAL")]
+    public void Tag_reserved_name_fails(string tag)
+    {
+        var input = Valid() with { Tags = new[] { tag } };
+        var result = NotifyCreatedV1Validator.Validate(input);
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Failures, f => f.Field.StartsWith("tags["));
+    }
+
+    [Fact]
+    public void Tag_empty_or_whitespace_fails()
+    {
+        var input = Valid() with { Tags = new[] { "ok", "", "  " } };
+        var result = NotifyCreatedV1Validator.Validate(input);
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Failures, f => f.Field == "tags[1]");
+        Assert.Contains(result.Failures, f => f.Field == "tags[2]");
+    }
+
+    [Fact]
+    public void Tag_over_max_chars_fails()
+    {
+        var input = Valid() with { Tags = new[] { new string('x', NotifyCreatedV1Validator.TagMaxChars + 1) } };
+        var result = NotifyCreatedV1Validator.Validate(input);
+        Assert.Contains(result.Failures, f => f.Field == "tags[0]");
+    }
+
+    [Fact]
+    public void Tags_over_max_count_fails()
+    {
+        var tags = Enumerable.Range(0, NotifyCreatedV1Validator.TagsMaxCount + 1)
+                             .Select(i => $"t{i}").ToArray();
+        var input = Valid() with { Tags = tags };
+        var result = NotifyCreatedV1Validator.Validate(input);
+        Assert.Contains(result.Failures, f => f.Field == "tags");
+    }
+
+    [Fact]
+    public void Tags_null_or_empty_passes()
+    {
+        Assert.True(NotifyCreatedV1Validator.Validate(Valid() with { Tags = null }).IsValid);
+        Assert.True(NotifyCreatedV1Validator.Validate(Valid() with { Tags = Array.Empty<string>() }).IsValid);
+    }
 }
