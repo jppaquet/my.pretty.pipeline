@@ -77,6 +77,12 @@ var host = new HostBuilder()
             var cosmos = sp.GetRequiredService<CosmosClient>();
             return new CosmosArchiveSink(cosmos.GetContainer(opts.CosmosDatabase, opts.CosmosNotificationsContainer));
         });
+        services.AddSingleton<IUserDirectory>(sp =>
+        {
+            var opts = sp.GetRequiredService<IOptions<ArchiveOptions>>().Value;
+            var cosmos = sp.GetRequiredService<CosmosClient>();
+            return new CosmosUserDirectory(cosmos.GetContainer(opts.CosmosDatabase, opts.CosmosDevicesContainer));
+        });
         services.AddSingleton<ArchiveHandler>();
 
         // ── Inbox ────────────────────────────────────────────────────────
@@ -97,6 +103,12 @@ var host = new HostBuilder()
 
         // ── Devices ──────────────────────────────────────────────────────
         services.AddSingleton<INotificationHub, NotificationHubAdapter>();
+        services.AddSingleton<IDeviceStore>(sp =>
+        {
+            var opts = sp.GetRequiredService<IOptions<DevicesOptions>>().Value;
+            var cosmos = sp.GetRequiredService<CosmosClient>();
+            return new CosmosDeviceStore(cosmos.GetContainer(opts.CosmosDatabase, opts.CosmosDevicesContainer));
+        });
         services.AddSingleton<RegisterHandler>();
 
         // ── Push ─────────────────────────────────────────────────────────

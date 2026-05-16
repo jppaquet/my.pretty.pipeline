@@ -5,16 +5,25 @@ using Notify.Shared.CloudEvents;
 namespace Notify.Shared.Cosmos;
 
 // Cosmos document shape for `notify.notifications` (partition key /source).
-// Written by Notify.Archive on each `notify.created.v1` event; read by
-// Notify.InboxApi when a device pulls history.
+// Written by Notify.Archive — one document per (envelope, subscribed user)
+// fan-out — read by Notify.InboxApi when the user pulls history.
 //
-// `Id` is either `DedupKeyHasher.Hash(source, deduplicationKey)` (when the
-// producer set a dedup key) or the CloudEvent envelope id (otherwise). Same
-// (source, dedupKey) within the 90-day TTL collapses onto one document.
+// `UserId` is the validated Sign-in-with-Apple `sub` of the recipient; the
+// Inbox query filters on it server-side so a token holder only sees their
+// own notifications. `Id` carries `userId` in its suffix so the same
+// envelope archives to N distinct documents (one per subscribed user) within
+// the same `/source` partition.
+//
+// Without a deduplicationKey: `Id = "{envelopeId}:{userId}"`.
+// With one:                   `Id = "{DedupKeyHasher.Hash(source, dedupKey)}:{userId}"`.
+// → re-sending the same (source, dedupKey) within the 90-day TTL collapses
+//   per-user onto one document (the cross-user uniqueness comes from the
+//   userId suffix).
 public sealed record NotificationDocument
 {
     [JsonPropertyName("id")]               public required string Id { get; init; }
     [JsonPropertyName("source")]           public required string Source { get; init; }
+    [JsonPropertyName("userId")]           public required string UserId { get; init; }
     [JsonPropertyName("title")]            public required string Title { get; init; }
     [JsonPropertyName("body")]             public required string Body { get; init; }
     [JsonPropertyName("type")]             public string Type { get; init; } = "info";
@@ -26,10 +35,11 @@ public sealed record NotificationDocument
     [JsonPropertyName("timestamp")]        public required DateTimeOffset Timestamp { get; init; }
     [JsonPropertyName("envelopeId")]       public required string EnvelopeId { get; init; }
 
-    public static NotificationDocument From(CloudEventEnvelope envelope, string id) => new()
+    public static NotificationDocument From(CloudEventEnvelope envelope, string baseId, string userId) => new()
     {
-        Id = id,
+        Id = $"{baseId}:{userId}",
         Source = envelope.Data.Source,
+        UserId = userId,
         Title = envelope.Data.Title,
         Body = envelope.Data.Body,
         Type = envelope.Data.Type,

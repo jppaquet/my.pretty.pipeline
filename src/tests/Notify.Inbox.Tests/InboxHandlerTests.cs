@@ -5,10 +5,14 @@ namespace Notify.Functions.Inbox.Tests;
 
 public class InboxHandlerTests
 {
-    private static NotificationDocument Doc(string source, DateTimeOffset ts, string? title = null) => new()
+    private const string UserA = "001234.aaaaaaaa";
+    private const string UserB = "001234.bbbbbbbb";
+
+    private static NotificationDocument Doc(string userId, string source, DateTimeOffset ts, string? title = null) => new()
     {
         Id = Guid.NewGuid().ToString(),
         Source = source,
+        UserId = userId,
         Title = title ?? "t",
         Body = "b",
         Timestamp = ts,
@@ -16,25 +20,45 @@ public class InboxHandlerTests
     };
 
     [Fact]
-    public async Task Returns_items_newest_first()
+    public async Task Returns_items_newest_first_for_authenticated_user()
     {
         var fake = new InMemoryInboxQuery();
         var t0 = DateTimeOffset.UtcNow;
         fake.Stored.AddRange(new[]
         {
-            Doc("a", t0.AddMinutes(-1), "old"),
-            Doc("b", t0,                "new"),
-            Doc("a", t0.AddSeconds(-30),"mid"),
+            Doc(UserA, "a", t0.AddMinutes(-1), "old"),
+            Doc(UserA, "b", t0,                "new"),
+            Doc(UserA, "a", t0.AddSeconds(-30),"mid"),
         });
 
         var handler = new InboxHandler(fake);
-        var result = await handler.HandleAsync(new InboxQueryRequest());
+        var result = await handler.HandleAsync(UserA, new InboxQueryRequest());
 
         var ok = Assert.IsType<InboxResult.Ok>(result);
         Assert.Collection(ok.Items,
             d => Assert.Equal("new", d.Title),
             d => Assert.Equal("mid", d.Title),
             d => Assert.Equal("old", d.Title));
+        Assert.Equal(UserA, fake.LastUserId);
+    }
+
+    [Fact]
+    public async Task Filters_out_other_users_documents()
+    {
+        var fake = new InMemoryInboxQuery();
+        var t0 = DateTimeOffset.UtcNow;
+        fake.Stored.AddRange(new[]
+        {
+            Doc(UserA, "a", t0, "mine"),
+            Doc(UserB, "a", t0, "theirs"),
+        });
+
+        var handler = new InboxHandler(fake);
+        var result = await handler.HandleAsync(UserA, new InboxQueryRequest());
+
+        var ok = Assert.IsType<InboxResult.Ok>(result);
+        var doc = Assert.Single(ok.Items);
+        Assert.Equal("mine", doc.Title);
     }
 
     [Fact]
@@ -43,12 +67,12 @@ public class InboxHandlerTests
         var fake = new InMemoryInboxQuery();
         fake.Stored.AddRange(new[]
         {
-            Doc("a", DateTimeOffset.UtcNow),
-            Doc("b", DateTimeOffset.UtcNow),
+            Doc(UserA, "a", DateTimeOffset.UtcNow),
+            Doc(UserA, "b", DateTimeOffset.UtcNow),
         });
 
         var handler = new InboxHandler(fake);
-        var result = await handler.HandleAsync(new InboxQueryRequest { Source = "a" });
+        var result = await handler.HandleAsync(UserA, new InboxQueryRequest { Source = "a" });
 
         var ok = Assert.IsType<InboxResult.Ok>(result);
         var doc = Assert.Single(ok.Items);
@@ -62,7 +86,7 @@ public class InboxHandlerTests
         var fake = new InMemoryInboxQuery { NextContinuationToken = "next-page-token" };
 
         var handler = new InboxHandler(fake);
-        var result = await handler.HandleAsync(new InboxQueryRequest { ContinuationToken = "incoming" });
+        var result = await handler.HandleAsync(UserA, new InboxQueryRequest { ContinuationToken = "incoming" });
 
         var ok = Assert.IsType<InboxResult.Ok>(result);
         Assert.Equal("incoming", fake.LastContinuationToken);
@@ -75,7 +99,7 @@ public class InboxHandlerTests
         var fake = new InMemoryInboxQuery();
         var handler = new InboxHandler(fake);
 
-        await handler.HandleAsync(new InboxQueryRequest());
+        await handler.HandleAsync(UserA, new InboxQueryRequest());
 
         Assert.Equal(InboxOptions.DefaultLimit, fake.LastLimit);
     }
@@ -89,7 +113,7 @@ public class InboxHandlerTests
         var fake = new InMemoryInboxQuery();
         var handler = new InboxHandler(fake);
 
-        var result = await handler.HandleAsync(new InboxQueryRequest { Limit = limit });
+        var result = await handler.HandleAsync(UserA, new InboxQueryRequest { Limit = limit });
 
         var bad = Assert.IsType<InboxResult.BadRequest>(result);
         Assert.Contains(bad.Failures, f => f.Field == "limit");
@@ -101,7 +125,7 @@ public class InboxHandlerTests
         var fake = new InMemoryInboxQuery();
         var handler = new InboxHandler(fake);
 
-        var result = await handler.HandleAsync(new InboxQueryRequest
+        var result = await handler.HandleAsync(UserA, new InboxQueryRequest
         {
             Source = new string('x', InboxOptions.MaxSourceLength + 1),
         });
@@ -114,12 +138,13 @@ public class InboxHandlerTests
     public async Task Validation_failures_short_circuit_query()
     {
         var fake = new InMemoryInboxQuery();
-        fake.Stored.Add(Doc("a", DateTimeOffset.UtcNow));
+        fake.Stored.Add(Doc(UserA, "a", DateTimeOffset.UtcNow));
         var handler = new InboxHandler(fake);
 
-        await handler.HandleAsync(new InboxQueryRequest { Limit = 0 });
+        await handler.HandleAsync(UserA, new InboxQueryRequest { Limit = 0 });
 
         Assert.Null(fake.LastSource);
         Assert.Equal(0, fake.LastLimit);
+        Assert.Null(fake.LastUserId);
     }
 }

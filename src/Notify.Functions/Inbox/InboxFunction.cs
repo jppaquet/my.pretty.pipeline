@@ -4,13 +4,17 @@ using System.Web;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
+using Notify.Functions.Auth;
 using Notify.Shared.Json;
 
 namespace Notify.Functions.Inbox;
 
-// Thin HTTP shim around InboxHandler. AuthorizationLevel.Function uses the
-// Function App's per-function key — same model as RegisterDeviceFunction
-// because the inbox is user-owned, not project-scoped.
+// Thin HTTP shim around InboxHandler. `AuthorizationLevel.Anonymous` here
+// means the Functions host does not enforce a function-key check — auth is
+// the JWT, validated by JwtAuthMiddleware and required by this function:
+// without an AppleUser in the request context we return 401. The handler
+// receives the validated Sub and uses it as the partition for the inbox
+// query; a token holder can only see their own notifications.
 public sealed class InboxFunction
 {
     private readonly InboxHandler _handler;
@@ -24,25 +28,35 @@ public sealed class InboxFunction
 
     [Function("Inbox")]
     public async Task<HttpResponseData> Run(
-        [HttpTrigger(AuthorizationLevel.Function, "get", Route = "v1/inbox")]
-        HttpRequestData req)
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "v1/inbox")]
+        HttpRequestData req,
+        FunctionContext context)
     {
-        var query = HttpUtility.ParseQueryString(req.Url.Query);
-        var request = new InboxQueryRequest
+        if (context.Items.TryGetValue(JwtAuthMiddleware.UserContextKey, out var raw)
+            && raw is AppleUser user)
         {
-            Source = query["source"],
-            Limit = int.TryParse(query["limit"], out var l) ? l : InboxOptions.DefaultLimit,
-            ContinuationToken = query["continuationToken"],
-        };
+            var query = HttpUtility.ParseQueryString(req.Url.Query);
+            var request = new InboxQueryRequest
+            {
+                Source = query["source"],
+                Limit = int.TryParse(query["limit"], out var l) ? l : InboxOptions.DefaultLimit,
+                ContinuationToken = query["continuationToken"],
+            };
 
-        var result = await _handler.HandleAsync(request);
+            var result = await _handler.HandleAsync(user.Sub, request);
 
-        return result switch
-        {
-            InboxResult.Ok ok           => await Json(req, HttpStatusCode.OK, new { items = ok.Items, continuationToken = ok.ContinuationToken }),
-            InboxResult.BadRequest bad  => await Json(req, HttpStatusCode.BadRequest, new { errors = bad.Failures }),
-            _ => throw new InvalidOperationException($"Unexpected result type {result.GetType()}"),
-        };
+            return result switch
+            {
+                InboxResult.Ok ok           => await Json(req, HttpStatusCode.OK, new { items = ok.Items, continuationToken = ok.ContinuationToken }),
+                InboxResult.BadRequest bad  => await Json(req, HttpStatusCode.BadRequest, new { errors = bad.Failures }),
+                _ => throw new InvalidOperationException($"Unexpected result type {result.GetType()}"),
+            };
+        }
+
+        var unauth = req.CreateResponse(HttpStatusCode.Unauthorized);
+        unauth.Headers.Add("content-type", "text/plain; charset=utf-8");
+        await unauth.WriteStringAsync("missing or invalid bearer token");
+        return unauth;
     }
 
     private static async Task<HttpResponseData> Json(HttpRequestData req, HttpStatusCode status, object body)

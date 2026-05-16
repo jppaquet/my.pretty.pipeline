@@ -17,10 +17,12 @@ final class AppContainer {
 
     static var shared: AppContainer = .makeDefault()
 
-    // Reads `NotifyAPIBaseURL` and `NotifyFunctionKey` from Info.plist (set
-    // via xcconfig per environment). Falls back to the keychain for the
-    // function key — useful so a user can paste a key on first launch via a
-    // settings sheet instead of baking it into the build.
+    // Reads `NotifyAPIBaseURL` from Info.plist (set via xcconfig per
+    // environment). Auth is entirely Sign-in-with-Apple: the user signs in
+    // through SignInView, the JWT lands in the Keychain, and every backend
+    // request reads it back via `bearer`. PR-C retired the legacy
+    // `NotifyFunctionKey` build-time plist value — the iOS bundle no longer
+    // carries any backend credential.
     static func makeDefault() -> AppContainer {
         // UI tests run hermetically against a mock backend pre-seeded with
         // stable IDs so XCUITest can locate `inbox.row.ui-test-1` on both
@@ -44,14 +46,11 @@ final class AppContainer {
             ?? URL(string: "https://func-notify.invalid")!  // sentinel — always valid literal
         // swiftlint:enable force_unwrapping
 
-        let plistKey = Bundle.main.object(forInfoDictionaryKey: "NotifyFunctionKey") as? String
-        let functionKey = keychain.load(forKey: KeychainKey.functionKey) ?? plistKey ?? ""
-
         // Resolves the JWT at call time so a sign-in / sign-out mid-session is
         // picked up by the next request without rebuilding the API client.
         let bearer: BearerTokenProvider = { keychain.load(forKey: KeychainKey.appleIdentityToken) }
 
-        let api = NotifyAPIClient(baseURL: baseURL, functionKey: functionKey, bearer: bearer)
+        let api = NotifyAPIClient(baseURL: baseURL, bearer: bearer)
         return AppContainer(api: api, keychain: keychain)
     }
 }

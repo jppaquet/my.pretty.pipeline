@@ -58,4 +58,9 @@ docs/                             SCHEMA, DEPLOY, PROJECT-ONBOARDING
 - Don't split `Notify.Functions` back into per-feature projects — one Function App = one zip = one project. The matrix that overwrote itself is gone for a reason (PR #46).
 
 ## Phase status
-Phase 0/1/2 backend done end-to-end on dev RG. Live triggers: `Ingest`, `archive`, `push`, `RegisterDevice`. EG subs: `sub-archive`, `sub-push` both Succeeded. **Phase 2 manual gap:** APNs `.p8` upload (`az notification-hub credential apns update …`) — required for actual on-device delivery, not for the test loop. **Phase 3 next:** mobile app (SwiftUI), per `~/.claude/plans/that-the-begining-of-validated-lecun.md` line 341.
+Phase 0/1/2 backend done end-to-end on dev RG. Live triggers: `Ingest`, `archive`, `push`, `RegisterDevice`. EG subs: `sub-archive`, `sub-push` both Succeeded. **Phase 2 manual gap:** APNs `.p8` upload (`az notification-hub credential apns update …`) — required for actual on-device delivery, not for the test loop. Phase 3 (iOS app + SiwA identity) shipped: post-security-audit, the IPA carries no backend credential; auth is Sign-in-with-Apple end-to-end (validated server-side via Apple's JWKS), Inbox + RegisterDevice require a valid Bearer JWT, Archive fans out per subscribed user, and the inbox is filtered to `c.userId == jwt.sub`.
+
+## Auth model (post-PR-C)
+Two independent auth boundaries:
+- **Producer → IngestionApi**: per-project API key (`npk_*`, Argon2id-hashed with KV pepper). Producers are scripts/cron/CI, not humans; this auth is unchanged.
+- **iOS app → Inbox + RegisterDevice**: Sign-in-with-Apple identity token (JWT), validated by `Notify.Functions/Auth/JwtAuthMiddleware` against Apple's JWKS and the configured `Auth__AppleAudience` (= iOS bundle id). The `sub` claim is the per-user partition for the inbox and the per-installation user binding in the `devices` container.

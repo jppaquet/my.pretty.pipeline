@@ -4,10 +4,13 @@ using Notify.Shared.Cosmos;
 namespace Notify.Functions.Inbox;
 
 // Seam between InboxHandler and Cosmos so unit tests can drive the handler
-// without standing up the emulator (mirror of IArchiveSink).
+// without standing up the emulator (mirror of IArchiveSink). The userId is
+// always supplied by the handler (extracted from the validated JWT in the
+// HTTP shim) and is the security boundary for the query — never trust the
+// query string here.
 public interface IInboxQuery
 {
-    Task<InboxPage> QueryAsync(string? source, int limit, string? continuationToken, CancellationToken ct = default);
+    Task<InboxPage> QueryAsync(string userId, string? source, int limit, string? continuationToken, CancellationToken ct = default);
 }
 
 public sealed record InboxPage(IReadOnlyList<NotificationDocument> Items, string? ContinuationToken);
@@ -18,9 +21,15 @@ public sealed class CosmosInboxQuery : IInboxQuery
 
     public CosmosInboxQuery(Container notifications) => _notifications = notifications;
 
-    public async Task<InboxPage> QueryAsync(string? source, int limit, string? continuationToken, CancellationToken ct = default)
+    public async Task<InboxPage> QueryAsync(string userId, string? source, int limit, string? continuationToken, CancellationToken ct = default)
     {
-        var query = new QueryDefinition("SELECT * FROM c ORDER BY c.timestamp DESC");
+        ArgumentException.ThrowIfNullOrWhiteSpace(userId);
+
+        // Cross-partition by default — the inbox spans every `source` partition
+        // the user is subscribed to. When the caller supplies a source filter,
+        // we also constrain the partition for a cheaper point-partition query.
+        var query = new QueryDefinition("SELECT * FROM c WHERE c.userId = @userId ORDER BY c.timestamp DESC")
+            .WithParameter("@userId", userId);
         var options = new QueryRequestOptions { MaxItemCount = limit };
         if (!string.IsNullOrEmpty(source))
             options.PartitionKey = new PartitionKey(source);
