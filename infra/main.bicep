@@ -27,6 +27,9 @@ param enableArchiveSubscription bool = false
 @description('Phase 2+: provision the EG push subscription. Set true only after Notify.PushDelivery code is on the production slot.')
 param enablePushSubscription bool = false
 
+@description('Sign-in-with-Apple audience claim. iOS bundle identifier of the client app. Forks: override this on the cd-deploy parameters line (`appleAudience=<your-bundle-id>`) to match the bundle id in your Xcode project.')
+param appleAudience string = 'my.pretty.pipeline'
+
 var namePrefix = 'notify'
 var tags = {
   project: 'my.pipeline'
@@ -126,6 +129,7 @@ module functions 'modules/functions.bicep' = {
     userAssignedIdentityResourceId: mi.id
     userAssignedIdentityClientId: mi.properties.clientId
     userAssignedIdentityPrincipalId: mi.properties.principalId
+    appleAudience: appleAudience
   }
 }
 

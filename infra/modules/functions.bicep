@@ -31,6 +31,9 @@ param notificationHubConnectionStringSecretName string
 @description('Notification Hub name (DeviceApi + PushDelivery).')
 param notificationHubName string
 
+@description('Sign-in-with-Apple audience claim. iOS bundle identifier of the client app (e.g. `my.pretty.pipeline`). The JWT middleware (Notify.Functions/Auth) rejects tokens whose `aud` does not match. Forks set this to their own bundle id.')
+param appleAudience string
+
 @description('Resource ID of the user-assigned managed identity the Function App uses at runtime. The same identity gets Cosmos data-plane access in cosmos.bicep; DefaultAzureCredential picks it up automatically when it is the only MI attached.')
 param userAssignedIdentityResourceId string
 
@@ -202,6 +205,9 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
         // the runtime resolves the reference via the user-assigned MI.
         { name: 'NotificationHubConnectionString', value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=${notificationHubConnectionStringSecretName})' }
         { name: 'NotificationHubName', value: notificationHubName }
+        // Sign-in-with-Apple audience. Double-underscore syntax binds to
+        // AuthOptions.AppleAudience via configuration sectioning.
+        { name: 'Auth__AppleAudience', value: appleAudience }
       ]
     }
   }
