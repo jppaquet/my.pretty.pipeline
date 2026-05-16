@@ -29,7 +29,13 @@ resource mi 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   tags: tags
 }
 
-// Allow GitHub Actions on `main` to deploy.
+// Allow GitHub Actions on `main` to deploy. This is the *only* federated subject
+// — there is intentionally no `:pull_request` FIC. PR-context jobs that mint a
+// token for this MI would inherit Contributor + User Access Administrator on
+// the RG (see role assignments below); since the repo is public, that
+// previously meant any PR run could exfiltrate Cosmos data, KV secrets, or
+// re-grant roles to attacker principals. PR validation is limited to
+// `bicep build` (no Azure auth required) in ci-infra.yml.
 resource fedMain 'Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials@2023-01-31' = {
   parent: mi
   name: 'github-main'
@@ -37,20 +43,6 @@ resource fedMain 'Microsoft.ManagedIdentity/userAssignedIdentities/federatedIden
     issuer: 'https://token.actions.githubusercontent.com'
     audiences: [ 'api://AzureADTokenExchange' ]
     subject: 'repo:${githubOwner}/${githubRepo}:ref:refs/heads/main'
-  }
-}
-
-// Allow GitHub Actions in PR context to run `bicep what-if` (read-only against the RG).
-// Azure rejects concurrent FIC writes under the same MI ("ConcurrentFederatedIdentityCredentialsWritesForSingleManagedIdentity"),
-// so serialize via dependsOn on the previous FIC.
-resource fedPullRequest 'Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials@2023-01-31' = {
-  parent: mi
-  name: 'github-pull-request'
-  dependsOn: [ fedMain ]
-  properties: {
-    issuer: 'https://token.actions.githubusercontent.com'
-    audiences: [ 'api://AzureADTokenExchange' ]
-    subject: 'repo:${githubOwner}/${githubRepo}:pull_request'
   }
 }
 
