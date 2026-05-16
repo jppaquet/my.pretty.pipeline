@@ -48,6 +48,12 @@ resource account 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' = {
         backupStorageRedundancy: 'Local'
       }
     }
+    // Force AAD-only data-plane auth. The Function App already uses MI via
+    // CosmosClient(endpoint, new DefaultAzureCredential()) and gets access through
+    // `dataContributorPrincipalIds` below — keys aren't needed anywhere. Disabling
+    // local auth removes the entire shared-key class of credentials so a
+    // Contributor-scoped pivot can't `az cosmosdb keys list` and bypass RBAC.
+    disableLocalAuth: true
   }
 }
 

@@ -32,6 +32,13 @@ resource topic 'Microsoft.EventGrid/topics@2024-06-01-preview' = {
   properties: {
     inputSchema: 'CloudEventSchemaV1_0'
     publicNetworkAccess: 'Enabled'
+    // Force AAD-only publishing. The Ingest function uses
+    // `new EventGridPublisherClient(uri, new DefaultAzureCredential())` and is
+    // granted EventGrid Data Sender on this topic via `dataSenderPrincipalIds`
+    // below. Topic SAS keys aren't used anywhere; disabling local auth removes
+    // them as an attack surface (a Contributor-scoped pivot can't
+    // `az eventgrid topic key list` and publish past the Ingest gate).
+    disableLocalAuth: true
   }
 }
 
