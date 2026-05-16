@@ -9,17 +9,21 @@ namespace Notify.Functions.Auth;
 
 // Worker middleware that runs on every function invocation. For HTTP requests
 // it looks for an `Authorization: Bearer …` header; if present, validates the
-// JWT through AppleJwtValidator. Behavior:
+// JWT through AppleJwtValidator and consults IAllowlistRepository:
 //   - Absent header     → pass through (function-key gate handles it)
-//   - Present + valid   → attach AppleUser to FunctionContext.Items["AppleUser"]
+//   - Present + invalid → 401, don't invoke the handler
+//   - Present + valid + approved
+//                       → attach AppleUser to FunctionContext.Items["AppleUser"]
 //                          and proceed (handlers read it via this key)
-//   - Present + invalid → return 401 immediately (don't invoke the handler)
+//   - Present + valid + not approved
+//                       → 403 "awaiting approval". The repository will have
+//                         upserted a pending row so the sub appears in Cosmos
+//                         Data Explorer for the admin to flip.
+//
+// When AuthOptions.CosmosAllowedUsersContainer is unset, Program.cs binds the
+// AlwaysApproveAllowlistRepository — preserves pre-allowlist behavior.
 //
 // Non-HTTP invocations (EventGrid triggers for Archive/Push) are a no-op.
-//
-// In PR-A this is purely additive: nothing requires a JWT yet, so existing
-// function-key clients are unaffected. PR-B starts populating the header from
-// the iOS app; PR-C flips Inbox + RegisterDevice to require the AppleUser.
 public sealed class JwtAuthMiddleware : IFunctionsWorkerMiddleware
 {
     public const string UserContextKey = "AppleUser";
@@ -54,6 +58,18 @@ public sealed class JwtAuthMiddleware : IFunctionsWorkerMiddleware
             var resp = http.CreateResponse(HttpStatusCode.Unauthorized);
             resp.Headers.Add("content-type", "text/plain; charset=utf-8");
             await resp.WriteStringAsync("invalid bearer token");
+            context.GetInvocationResult().Value = resp;
+            return;
+        }
+
+        var allowlist = context.InstanceServices.GetRequiredService<IAllowlistRepository>();
+        var approved = await allowlist.IsApprovedAsync(user.Sub, context.CancellationToken);
+        if (!approved)
+        {
+            _logger.LogWarning("rejected sign-in for sub {Sub} on {Function}: awaiting approval in allowedUsers container", user.Sub, context.FunctionDefinition.Name);
+            var resp = http.CreateResponse(HttpStatusCode.Forbidden);
+            resp.Headers.Add("content-type", "text/plain; charset=utf-8");
+            await resp.WriteStringAsync("user awaiting approval");
             context.GetInvocationResult().Value = resp;
             return;
         }

@@ -122,6 +122,23 @@ var host = new HostBuilder()
         services.AddMemoryCache();
         services.AddHttpClient<IAppleJwksProvider, AppleJwksProvider>();
         services.AddSingleton<AppleJwtValidator>();
+        // Allowlist gate. When `Auth__CosmosAllowedUsersContainer` is unset we
+        // bind the no-op implementation so forks that haven't deployed the
+        // bicep change yet still authenticate (any valid SiwA JWT goes
+        // through). Once the setting is present, every authenticated request
+        // gets a point-read against `allowedUsers/<sub>` with 60-s caching.
+        services.AddSingleton<IAllowlistRepository>(sp =>
+        {
+            var opts = sp.GetRequiredService<IOptions<AuthOptions>>().Value;
+            if (string.IsNullOrWhiteSpace(opts.CosmosAllowedUsersContainer)
+                || string.IsNullOrWhiteSpace(opts.CosmosDatabase))
+                return new AlwaysApproveAllowlistRepository();
+            var cosmos = sp.GetRequiredService<CosmosClient>();
+            var cache = sp.GetRequiredService<IMemoryCache>();
+            return new CosmosAllowlistRepository(
+                cosmos.GetContainer(opts.CosmosDatabase, opts.CosmosAllowedUsersContainer),
+                cache);
+        });
     })
     .Build();
 

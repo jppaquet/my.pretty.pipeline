@@ -219,6 +219,34 @@ empty inbox.
 For TestFlight: tag a release (`git tag v0.1.0 && git push --tags`) →
 `cd-testflight.yml` archives + uploads.
 
+### Approving testers (the `allowedUsers` allowlist)
+
+Every authenticated request gates on the `allowedUsers` Cosmos container.
+Your first sign-in (and every tester's) self-registers a row with
+`approved: false`; you flip it to `true` in Cosmos Data Explorer and the
+user is in. There is no log-scraping, no Function App restart, no deploy.
+
+Bootstrap your own access:
+
+1. Sign in on the iOS app. The first request to `/v1/inbox` or
+   `/v1/devices` returns `403 user awaiting approval` — that's expected.
+2. Open the Azure Portal → your Cosmos account → **Data Explorer** →
+   `notify` → `allowedUsers` → **Items**.
+3. Open your row, flip `"approved": false` to `"approved": true`, stamp
+   `"approvedAt"` with a UTC timestamp (optional, informational only),
+   click **Update**.
+4. Pull-to-refresh the iOS app. Inbox loads.
+
+Approved results are cached in-memory for 60 seconds, so a revocation
+(flipping back to `false`) can take up to a minute to bite. For instant
+effect, restart the Function App (`az functionapp restart …`).
+
+To make the allowlist completely permissive (any valid SiwA JWT
+accepted, pre-allowlist behavior), set
+`Auth__CosmosAllowedUsersContainer=` (empty string) on the Function App —
+the DI binds `AlwaysApproveAllowlistRepository` and skips the Cosmos
+read.
+
 ## 9. Onboard a producing project
 
 Producers authenticate with per-project `npk_*` API keys, separate from the
@@ -264,6 +292,10 @@ docs/
   `az functionapp config appsettings list -g "$RG" -n <func> --query
   "[?name=='Auth__AppleAudience']"` and `appleAudience` on the bicep
   deploy.
+- **Inbox returns 403 "user awaiting approval"** — your sub is in
+  `allowedUsers` with `approved: false`. Open Cosmos Data Explorer → flip
+  to `true`, then pull-to-refresh in the app. See the "Approving testers"
+  section above.
 - **Empty inbox after sending notifications** — Archive logs "zero
   registered users" when no `DeviceDocument` exists. Sign in on the iOS
   app first; that creates the device entry; then send the notification.

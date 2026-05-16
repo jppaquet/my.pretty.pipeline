@@ -208,6 +208,14 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
         // Sign-in-with-Apple audience. Double-underscore syntax binds to
         // AuthOptions.AppleAudience via configuration sectioning.
         { name: 'Auth__AppleAudience', value: appleAudience }
+        // Cosmos pointers for the user allowlist. JwtAuthMiddleware does a
+        // point-read against `allowedUsers/<sub>` on every authenticated
+        // request to gate access; first sign-in self-registers a
+        // `approved:false` row, which an admin flips in Cosmos Data Explorer
+        // to enroll the tester. Leaving CosmosAllowedUsersContainer empty
+        // binds AlwaysApproveAllowlistRepository (pre-allowlist behavior).
+        { name: 'Auth__CosmosDatabase', value: 'notify' }
+        { name: 'Auth__CosmosAllowedUsersContainer', value: 'allowedUsers' }
       ]
     }
   }

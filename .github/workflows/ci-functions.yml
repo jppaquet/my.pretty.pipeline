@@ -45,7 +45,14 @@ jobs:
       cosmos:
         image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:latest
         env:
-          AZURE_COSMOS_EMULATOR_PARTITION_COUNT: "3"
+          # `dotnet test Notify.slnx` discovers every test assembly and runs
+          # them in parallel processes. Each emulator-using assembly
+          # (Archive, Inbox, Auth) creates its own database concurrently;
+          # partition count = 3 was already tight for 2 assemblies and
+          # timed out at 3 (PR-allowlist). 10 gives enough physical
+          # partitions to keep CreateDatabase/Container calls under the
+          # 10 s client timeout.
+          AZURE_COSMOS_EMULATOR_PARTITION_COUNT: "10"
           AZURE_COSMOS_EMULATOR_ENABLE_DATA_PERSISTENCE: "false"
         ports:
           - 8081:8081
