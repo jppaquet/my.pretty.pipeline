@@ -46,16 +46,17 @@ curl -sf -H "x-api-key: $NOTIFY_KEY" -H "content-type: application/json" \
 # Inbox read API (`GET /v1/inbox`)
 
 Reads the archived notification history. Used by the iOS app for the inbox
-list and pull-to-refresh; a future web client will use the same endpoint.
-Authenticated with the Function App's per-function key (not a project
-`npk_*` key) because the inbox is user-owned, not project-scoped.
+list and pull-to-refresh. The inbox is user-scoped: the response only
+contains notifications archived for the authenticated user's `sub`.
 
 ## Headers
 
 | Header | Required | Notes |
 |---|---|---|
-| `x-functions-key` | one of these two | Function App per-function key |
-| `?code=<key>` (query) | one of these two | same key, in the URL |
+| `Authorization: Bearer <jwt>` | yes | Sign-in-with-Apple identity token. Validated server-side against Apple's JWKS and the configured `Auth__AppleAudience` (the iOS bundle id). The `sub` claim becomes the inbox partition. |
+
+`x-functions-key` was retired in PR-C — the IPA no longer carries a
+backend credential.
 
 ## Query parameters
 
@@ -71,8 +72,9 @@ Authenticated with the Function App's per-function key (not a project
 {
   "items": [
     {
-      "id": "…",                  // dedup-derived hash or envelope id
+      "id": "…:<userId>",         // baseId + ':' + Apple sub (per-user fan-out)
       "source": "home-pipeline",
+      "userId": "001234.abcdef",  // Apple sub of the recipient
       "title": "Backup failed",
       "body": "rsync exited 12 on host pi-01",
       "type": "alert",
@@ -97,12 +99,22 @@ Same `NotificationDocument` shape that Archive writes — see
 
 - `400` — `limit` outside `[1, 200]` or `source` over 64 chars. Response:
   `{ "errors": [ { "field": "limit", "message": "…" } ] }`.
-- `401` — missing/invalid function key (Functions runtime).
+- `401` — missing or invalid `Authorization: Bearer …` (JwtAuthMiddleware
+  rejects tokens with bad signature, wrong issuer/audience, or expired).
 
-## curl recipe
+# Device registration API (`POST /v1/devices`)
 
-```sh
-KEY=$(az functionapp keys list -g rg-notify-dev -n func-notify-<suffix> \
-  --query functionKeys.default -o tsv)
-curl -sf "$NOTIFY_URL/v1/inbox?source=home-pipeline&limit=20&code=$KEY" | jq
+iOS app registers its APNs token + the authenticated user binding. Same
+`Authorization: Bearer …` requirement as `/v1/inbox`. Tags are
+**server-derived** from the JWT `sub` — the client's `tags` field is
+ignored so a token holder can't subscribe their device to another user's
+audience.
+
+```jsonc
+{
+  "deviceToken": "<64 hex chars APNs token>",
+  "platform": "apns"
+}
 ```
+
+Response: `202 Accepted` with `{ "installationId": "<sha256(deviceToken)>" }`.

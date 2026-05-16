@@ -37,13 +37,20 @@ public sealed class ArchiveFunction
             Data = data,
         };
 
-        var outcome = await _handler.HandleAsync(envelope);
+        var result = await _handler.HandleAsync(envelope);
 
-        if (outcome == ArchiveOutcome.DuplicateIgnored)
+        _logger.LogInformation(
+            "Archive fan-out: source={Source} subscribed={Users} created={Created} duplicates={Duplicates}",
+            envelope.Data.Source, result.SubscribedUsers, result.Created, result.Duplicates);
+
+        if (result.SubscribedUsers == 0)
         {
-            _logger.LogInformation(
-                "Archive duplicate ignored: source={Source} dedup={Dedup}",
-                envelope.Data.Source, envelope.Data.DeduplicationKey);
+            // Notification was published but no users have registered yet — the
+            // inbox is empty for everyone. Log so it's debuggable when a fork
+            // forgets to sign in on the iOS app before sending notifications.
+            _logger.LogWarning(
+                "Archive dropped notification: zero registered users (source={Source} envelope={EnvelopeId})",
+                envelope.Data.Source, envelope.Id);
         }
     }
 }

@@ -3,15 +3,18 @@ using System.Text.Json;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
+using Notify.Functions.Auth;
 using Notify.Functions.Devices;
 using Notify.Shared.Json;
 
 namespace Notify.Functions.Devices;
 
-// Thin HTTP shim around RegisterHandler. AuthorizationLevel.Function uses the
-// Function App's per-function key — the iOS app fetches it once via TestFlight
-// build configuration. Project-key auth (npk_*) is not used here because
-// devices are user-owned, not project-scoped.
+// Thin HTTP shim around RegisterHandler. `AuthorizationLevel.Anonymous` here
+// means the Functions host does not enforce a function-key check — auth is
+// the JWT, validated by JwtAuthMiddleware and required by this function:
+// without an AppleUser in the request context we return 401. The handler
+// receives the validated Sub and binds the registered device to it so push
+// fan-out + inbox filtering can target the right recipient.
 public sealed class RegisterDeviceFunction
 {
     private readonly RegisterHandler _handler;
@@ -25,12 +28,21 @@ public sealed class RegisterDeviceFunction
 
     [Function("RegisterDevice")]
     public async Task<HttpResponseData> Run(
-        [HttpTrigger(AuthorizationLevel.Function, "post", Route = "v1/devices")]
-        HttpRequestData req)
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "v1/devices")]
+        HttpRequestData req,
+        FunctionContext context)
     {
+        if (!(context.Items.TryGetValue(JwtAuthMiddleware.UserContextKey, out var raw) && raw is AppleUser user))
+        {
+            var unauth = req.CreateResponse(HttpStatusCode.Unauthorized);
+            unauth.Headers.Add("content-type", "text/plain; charset=utf-8");
+            await unauth.WriteStringAsync("missing or invalid bearer token");
+            return unauth;
+        }
+
         var contentLength = req.Headers.TryGetValues("content-length", out var clen) && long.TryParse(clen.FirstOrDefault(), out var cl) ? cl : (long?)null;
 
-        var result = await _handler.HandleAsync(req.Body, contentLength);
+        var result = await _handler.HandleAsync(user.Sub, req.Body, contentLength);
 
         return result switch
         {

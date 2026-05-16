@@ -12,20 +12,19 @@ enum NotifyAPIError: Error, Equatable {
 }
 
 // Resolves the Bearer token at call time so the API client picks up the latest
-// JWT from the Keychain. Returns nil when the user isn't signed in — the
-// request still includes the function key (current behavior) and the backend
-// middleware skips JWT validation when no Authorization header is present.
+// JWT from the Keychain on every request. Returning nil means the user is
+// signed out; the request still goes out without an Authorization header and
+// the backend will respond 401 — letting the view-model surface the sign-in
+// gate to the user. The function key was retired in PR-C.
 typealias BearerTokenProvider = @Sendable () -> String?
 
 final class NotifyAPIClient: NotifyAPI {
     let baseURL: URL
-    let functionKey: String
     let session: URLSession
     private let bearer: BearerTokenProvider
 
-    init(baseURL: URL, functionKey: String, bearer: @escaping BearerTokenProvider = { nil }, session: URLSession = .shared) {
+    init(baseURL: URL, bearer: @escaping BearerTokenProvider, session: URLSession = .shared) {
         self.baseURL = baseURL
-        self.functionKey = functionKey
         self.bearer = bearer
         self.session = session
     }
@@ -58,7 +57,6 @@ final class NotifyAPIClient: NotifyAPI {
     }
 
     private func applyAuth(to request: inout URLRequest) {
-        request.setValue(functionKey, forHTTPHeaderField: "x-functions-key")
         if let token = bearer(), !token.isEmpty {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }

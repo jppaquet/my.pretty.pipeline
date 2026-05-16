@@ -6,8 +6,6 @@
 	<string>AppIcon</string>
 	<key>NotifyAPIBaseURL</key>
 	<string>https://func-notify-dev-nrajdy.azurewebsites.net</string>
-	<key>NotifyFunctionKey</key>
-	<string></string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>

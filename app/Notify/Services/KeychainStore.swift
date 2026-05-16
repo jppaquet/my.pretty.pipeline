@@ -11,12 +11,13 @@ protocol KeychainStoring {
 }
 
 enum KeychainKey {
-    static let functionKey = "functionKey"
     static let apnsToken = "apnsToken"
     // Sign-in-with-Apple identity token (JWT). Sent as
     // `Authorization: Bearer …` on every backend call once the user is signed
     // in. The backend's JwtAuthMiddleware (Notify.Functions/Auth) validates
-    // the token against Apple's JWKS and the configured audience claim.
+    // the token against Apple's JWKS and the configured audience claim;
+    // Inbox + RegisterDevice reject the request when this header is absent
+    // or invalid.
     static let appleIdentityToken = "appleIdentityToken"
     // Apple's stable per-app user identifier (the JWT `sub` claim). Captured
     // alongside the token so we have a durable display handle even after the

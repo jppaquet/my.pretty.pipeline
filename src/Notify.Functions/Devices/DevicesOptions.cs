@@ -9,6 +9,9 @@ public sealed record DevicesOptions
 {
     public required string NotificationHubConnectionString { get; init; }
     public required string NotificationHubName { get; init; }
+    public required string CosmosAccountEndpoint { get; init; }
+    public string CosmosDatabase { get; init; } = "notify";
+    public string CosmosDevicesContainer { get; init; } = "devices";
 
     public const int MaxRequestBodyBytes = 4 * 1024;
 }

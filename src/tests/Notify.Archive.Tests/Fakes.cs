@@ -15,3 +15,11 @@ internal sealed class InMemoryArchiveSink : IArchiveSink
         return Task.FromResult(ArchiveOutcome.Created);
     }
 }
+
+internal sealed class InMemoryUserDirectory : IUserDirectory
+{
+    public List<string> UserIds { get; } = new();
+
+    public Task<IReadOnlyCollection<string>> ListActiveUserIdsAsync(CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyCollection<string>>(UserIds);
+}
