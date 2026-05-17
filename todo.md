@@ -1,4 +1,0 @@
-- fix ci function issue
-- add federation idp for device
-- support webhook standard for ingestion ?
-- test full from scratch - like somebody just use my repo
