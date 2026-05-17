@@ -31,6 +31,8 @@ final class AppContainer {
         // the real KeychainStore returns errSecMissingEntitlement (-34018)
         // so a silent `try? keychain.save` would leave the SiwA gate empty
         // and SignInView would block the inbox under test.
+        // Checked BEFORE the compile-time preview flag so CI (Debug config)
+        // still runs tests with the stable fixture, not the richer preview set.
         if ProcessInfo.processInfo.arguments.contains("-NotifyUITestMockBackend") {
             let keychain = InMemoryKeychainStore()
             try? keychain.save("ui-test-stub-jwt", forKey: KeychainKey.appleIdentityToken)
@@ -38,6 +40,15 @@ final class AppContainer {
             return AppContainer(api: MockNotifyAPI.uiTestSeeded(), keychain: keychain)
         }
 
+        // Local preview mode: compile-time flag so Debug builds can iterate
+        // on UI without signing in or hitting the network. Richer data set
+        // than the UI-test fixture — multiple sources, days, priorities.
+        #if LOCAL_UI_PREVIEW
+        let keychain = InMemoryKeychainStore()
+        try? keychain.save("preview-stub-jwt", forKey: KeychainKey.appleIdentityToken)
+        try? keychain.save("preview-stub-user", forKey: KeychainKey.appleUserIdentifier)
+        return AppContainer(api: MockNotifyAPI.previewSeeded(), keychain: keychain)
+        #else
         let keychain = KeychainStore()
 
         let plistURL = Bundle.main.object(forInfoDictionaryKey: "NotifyAPIBaseURL") as? String
@@ -52,5 +63,6 @@ final class AppContainer {
 
         let api = NotifyAPIClient(baseURL: baseURL, bearer: bearer)
         return AppContainer(api: api, keychain: keychain)
+        #endif
     }
 }

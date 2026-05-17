@@ -53,3 +53,7 @@ struct SignInView: View {
         .padding(.vertical, 48)
     }
 }
+
+#Preview {
+    SignInView(viewModel: AuthViewModel(keychain: InMemoryKeychainStore()))
+}

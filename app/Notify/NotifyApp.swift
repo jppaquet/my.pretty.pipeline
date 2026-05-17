@@ -23,6 +23,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         // ask APNs for a device token — that fires
         // `didRegisterForRemoteNotificationsWithDeviceToken` which POSTs to
         // /v1/devices and creates an Installation in Notification Hubs.
+        #if !LOCAL_UI_PREVIEW
         Task { @MainActor in
             do {
                 let granted = try await UNUserNotificationCenter.current()
@@ -36,6 +37,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
                 NSLog("requestAuthorization failed: %@", String(describing: error))
             }
         }
+        #endif
         return true
     }
 

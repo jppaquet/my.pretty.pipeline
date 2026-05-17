@@ -160,6 +160,82 @@ final class MockNotifyAPI: NotifyAPI {
         return pageCursor < pages.count ? pages[pageCursor] : InboxPage(items: [], continuationToken: nil)
     }
 
+    // Fixture used by AppContainer for LOCAL_UI_PREVIEW builds. Richer than
+    // the UI-test fixture: multiple sources, days, priorities, tags, and
+    // deeplinks so grouping / detail layouts can be iterated without a backend.
+    static func previewSeeded() -> MockNotifyAPI {
+        let mock = MockNotifyAPI()
+        mock.pages = [InboxPage(items: Self.previewItems(), continuationToken: nil)]
+        return mock
+    }
+
+    private static let previewStressBody = "This is **bold**, *italic*, ~~strikethrough~~, "
+        + "`inline code`, and a [link](https://example.com).\n\n"
+        + "Blockquote:\n> Important note here\n\n"
+        + "Bullet list:\n- First item\n- Second item\n"
+        + "- Third item with **bold**\n\n"
+        + "Numbered list:\n1. Step one\n2. Step two\n3. Step three\n\n"
+        + "Mixed: ***bold italic***, `code with [brackets]`, and emojis 🚀 🔥 🎉"
+
+    private static let previewChangelogBody = "**Full changelog:**\n\n"
+        + "### Added\n- New ~~dark~~ light theme toggle\n"
+        + "- Support for *markdown* in notifications\n\n"
+        + "### Fixed\n- Memory leak in `ImageCache`\n"
+        + "- Race condition on `AuthViewModel`\n\n"
+        + "### Removed\n- Legacy `NotifyFunctionKey` (see PR-C)\n\n"
+        + "Code block:\n```swift\nlet container = AppContainer.makeDefault()\n```\n\n"
+        + "> ⚠️ **Breaking:** Requires iOS 17+"
+
+    private static func previewItems() -> [InboxNotification] {
+        let now = Date()
+        let cal = Calendar.current
+        let yesterday = cal.date(byAdding: .day, value: -1, to: now) ?? now
+        let twoDaysAgo = cal.date(byAdding: .day, value: -2, to: now) ?? now
+        let lastWeek = cal.date(byAdding: .day, value: -5, to: now) ?? now
+
+        return [
+            .mock(id: "p1", source: "deploy", title: "Production rollout failed",
+                  body: "Rollback initiated automatically. **v2.4.1** exceeded error budget.",
+                  priority: .high, tags: ["sre", "rollback"],
+                  timestamp: cal.date(byAdding: .minute, value: -5, to: now) ?? now),
+            .mock(id: "p2", source: "ci", title: "PR #149 checks passing",
+                  body: "All **12** workflows green on `feat/admin-app-pr2`.",
+                  priority: .normal, tags: ["github", "ci"],
+                  deeplink: URL(string: "https://github.com/jpp/my.pretty.pipeline/pull/149"),
+                  timestamp: cal.date(byAdding: .hour, value: -1, to: now) ?? now),
+            .mock(id: "p3", source: "deploy", title: "Staging deployment succeeded",
+                  body: "> Rollout completed in **42 s**\n- 3 pods updated\n- 0 restarts",
+                  priority: .normal, tags: ["deploy", "staging"],
+                  timestamp: cal.date(byAdding: .hour, value: -3, to: now) ?? now),
+            .mock(id: "p4", source: "home-pipeline", title: "NAS disk space warning",
+                  body: "NAS `/volume1` is **87 %** full. Consider running cleanup.",
+                  priority: .high, tags: ["nas", "storage"],
+                  timestamp: cal.date(byAdding: .hour, value: -6, to: now) ?? now),
+            .mock(id: "p5", source: "cron", title: "Weekly backup completed",
+                  body: "200 files archived to `s3://backups/weekly`.",
+                  priority: .low, timestamp: yesterday),
+            .mock(id: "p6", source: "ci", title: "Nightly tests passed",
+                  body: "All **847** tests green on `main`.",
+                  priority: .low, tags: ["ci"],
+                  timestamp: cal.date(byAdding: .hour, value: -3, to: yesterday) ?? yesterday),
+            .mock(id: "p7", source: "monitoring", title: "CPU spike on api-03",
+                  body: "Load average **12.4** — investigate before on-call shift ends.",
+                  priority: .high, tags: ["alert", "cpu"],
+                  timestamp: twoDaysAgo),
+            .mock(id: "p8", source: "security", title: "New advisory: CVE-2026-1234",
+                  body: "Patch available for `libfoo`. Severity: **critical**.",
+                  priority: .high, tags: ["cve", "security"],
+                  deeplink: URL(string: "https://nvd.nist.gov/vuln/detail/CVE-2026-1234"),
+                  timestamp: lastWeek),
+            .mock(id: "p9", source: "discord-bot", title: "Rich formatting stress test",
+                  body: previewStressBody, priority: .normal, tags: ["formatting", "test"],
+                  timestamp: cal.date(byAdding: .minute, value: -10, to: now) ?? now),
+            .mock(id: "p10", source: "deploy", title: "Deployment changelog v2.5.0",
+                  body: previewChangelogBody, priority: .high, tags: ["changelog", "deploy"],
+                  timestamp: cal.date(byAdding: .minute, value: -15, to: now) ?? now),
+        ]
+    }
+
     // Fixture used by AppContainer when the app is launched with
     // -NotifyUITestMockBackend. IDs are stable so InboxFlowTests can locate
     // `inbox.row.ui-test-1` on both iPhone and iPad destinations.

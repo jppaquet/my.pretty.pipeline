@@ -56,3 +56,25 @@ struct NotificationDetailView: View {
         .accessibilityIdentifier("notification.detail")
     }
 }
+
+#Preview("Detail — High Priority") {
+    NotificationDetailView(notification: InboxNotification.mock(
+        id: "p1", source: "deploy", title: "Production rollout failed",
+        body: "Rollback initiated automatically. **v2.4.1** exceeded error budget.",
+        priority: .high, tags: ["sre", "rollback"], timestamp: Date()
+    ))
+}
+
+#Preview("Detail — Heavy Markdown") {
+    NotificationDetailView(notification: InboxNotification.mock(
+        id: "p9", source: "discord-bot", title: "Rich formatting stress test",
+        body: "This is **bold**, *italic*, ~~strikethrough~~, `inline code`, "
+            + "and a [link](https://example.com).\n\n"
+            + "Blockquote:\n> Important note here\n\n"
+            + "Bullet list:\n- First item\n- Second item\n"
+            + "- Third item with **bold**\n\n"
+            + "Numbered list:\n1. Step one\n2. Step two\n3. Step three\n\n"
+            + "Mixed: ***bold italic***, `code with [brackets]`, and emojis 🚀 🔥 🎉",
+        priority: .normal, tags: ["formatting", "test"], timestamp: Date()
+    ))
+}

@@ -493,6 +493,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = my.pretty.pipeline;
 				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG LOCAL_UI_PREVIEW";
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
