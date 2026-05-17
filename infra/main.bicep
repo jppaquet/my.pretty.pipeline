@@ -119,6 +119,19 @@ module notificationHub 'modules/notificationhub.bicep' = {
   }
 }
 
+// Admin SPA hosting. Provisioned before the Function App module so its
+// hostname can flow into the CORS allowed-origins list — the admin SPA
+// calls the Function App cross-origin from the SWA's `*.azurestaticapps.net`
+// hostname.
+module adminSwa 'modules/static-web-app.bicep' = {
+  name: 'admin-swa-${env}'
+  params: {
+    namePrefix: namePrefix
+    env: env
+    tags: tags
+  }
+}
+
 // Function App + Storage + App Insights (all five Functions live here).
 module functions 'modules/functions.bicep' = {
   name: 'functions-${env}'
@@ -138,6 +151,7 @@ module functions 'modules/functions.bicep' = {
     appleAudience: appleAudience
     adminEntraTenantId: adminEntraTenantId
     adminEntraAudience: adminEntraAudience
+    adminAllowedOrigin: adminSwa.outputs.origin
   }
 }
 
@@ -164,3 +178,5 @@ module eventgrid 'modules/eventgrid.bicep' = {
 // ── outputs consumed by GitHub Actions cd-deploy.yml ────────────────
 output functionAppName string = functions.outputs.functionAppName
 output functionAppHostname string = functions.outputs.defaultHostname
+output adminSwaName string = adminSwa.outputs.name
+output adminSwaHostname string = adminSwa.outputs.hostname

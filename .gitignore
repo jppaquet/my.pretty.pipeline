@@ -49,3 +49,8 @@ fastlane/test_output/
 .env.*
 !.env.example
 my.pretty.pipeline.code-workspace
+
+# ── Local scratch (per-machine notes; never commit) ───────────────
+todo.md
+notes.md
+scratch/

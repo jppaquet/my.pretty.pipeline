@@ -228,12 +228,32 @@ ROLE_JSON=$(jq -nc --arg id "$(uuidgen)" '
      value: "Admin", isEnabled: true, allowedMemberTypes: ["User"] }]')
 az ad app update --id "$ADMIN_APP" --set "appRoles=$ROLE_JSON"
 
-# 3. Add the SPA redirect URI (filled in once you have the SWA hostname in
-#    PR-2 — for now leave this step until then). Same command:
-#    az ad app update --id "$ADMIN_APP" \
-#      --set "spa.redirectUris=['https://<swa>.azurestaticapps.net']"
+# 3. Expose an API scope so MSAL.js can request a Bearer token bound to
+#    this app's audience. The scope id is arbitrary; `access_as_user` is
+#    the conventional name. Identifier URI must be `api://<clientId>`.
+SCOPE_ID=$(uuidgen)
+IDENTIFIER_URI="api://$ADMIN_APP"
+SCOPE_JSON=$(jq -nc --arg id "$SCOPE_ID" --arg uri "$IDENTIFIER_URI" '{
+  requestedAccessTokenVersion: 2,
+  oauth2PermissionScopes: [{
+    id: $id, adminConsentDescription: "Manage the admin plane",
+    adminConsentDisplayName: "Manage the admin plane",
+    isEnabled: true, type: "User", value: "access_as_user"
+  }]
+}')
+az ad app update --id "$ADMIN_APP" \
+  --identifier-uris "$IDENTIFIER_URI" \
+  --set "api=$SCOPE_JSON"
 
-# 4. Assign yourself the Admin role.
+# 4. Once cd-deploy has provisioned the Static Web App, pull its hostname
+#    and add it as the SPA redirect URI so MSAL.js can complete the login
+#    redirect back to the SPA. Re-run this command if you ever recreate
+#    the SWA (the hostname is salted with a per-RG hash).
+SWA_HOST=$(az staticwebapp list -g "$RG" --query "[0].defaultHostname" -o tsv)
+az ad app update --id "$ADMIN_APP" \
+  --set "spa.redirectUris=['https://$SWA_HOST']"
+
+# 5. Assign yourself the Admin role.
 ME=$(az ad signed-in-user show --query id -o tsv)
 SP_ID=$(az ad sp create --id "$ADMIN_APP" --query id -o tsv 2>/dev/null \
         || az ad sp show --id "$ADMIN_APP" --query id -o tsv)
@@ -242,18 +262,28 @@ az rest --method POST \
   --uri "https://graph.microsoft.com/v1.0/users/$ME/appRoleAssignments" \
   --body "{\"principalId\":\"$ME\",\"resourceId\":\"$SP_ID\",\"appRoleId\":\"$APP_ROLE_ID\"}"
 
-# 5. Wire the audience into cd-deploy via a repo variable. tenantId is
+# 6. Wire the audience into cd-deploy via a repo variable. tenantId is
 #    already in `AZURE_TENANT_ID`.
 gh variable set ADMIN_AAD_AUDIENCE --body "$ADMIN_APP"
 ```
 
-Next `cd-deploy` run picks up `ADMIN_AAD_AUDIENCE` + `AZURE_TENANT_ID` and
-sets `Admin__EntraTenantId` / `Admin__EntraAudience` on the Function App.
+Next `cd-deploy` run picks up `ADMIN_AAD_AUDIENCE` + `AZURE_TENANT_ID` and:
+1. Sets `Admin__EntraTenantId` / `Admin__EntraAudience` on the Function App.
+2. Adds the SWA origin to the Function App's CORS allowed-origins.
+3. Renders `admin/config.template.js` → `admin/config.js` with your tenant +
+   audience + Function-App hostname, then uploads the `admin/` folder to
+   the Static Web App.
+
 MFA is enforced through Entra **Security Defaults** (Free tier; on by
 default for new tenants since 2019). Verify in portal → Entra ID →
 Properties → "Security defaults" = Enabled.
 
-To smoke-test before the admin app exists:
+After cd-deploy completes, open the SWA hostname in a browser
+(`echo "https://$SWA_HOST"`), click **Sign in**, do MFA, and you'll land
+on the allowlist table. Approve / revoke buttons hit the Function App
+directly via Bearer auth.
+
+To smoke-test the backend alone (no SPA):
 ```sh
 TOKEN=$(az account get-access-token \
   --resource "api://$ADMIN_APP" --query accessToken -o tsv)
