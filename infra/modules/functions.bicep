@@ -34,6 +34,12 @@ param notificationHubName string
 @description('Sign-in-with-Apple audience claim. iOS bundle identifier of the client app (e.g. `my.pretty.pipeline`). The JWT middleware (Notify.Functions/Auth) rejects tokens whose `aud` does not match. Forks set this to their own bundle id.')
 param appleAudience string
 
+@description('Entra ID tenant GUID for the admin app. Empty = admin plane disabled (AdminAuthMiddleware returns 503 on /admin/*). Picks the JWKS endpoint + the issuer claim. Same tenant as Azure subscription unless the fork wants a separate identity store.')
+param adminEntraTenantId string = ''
+
+@description('Entra ID app registration `appId` (client id) for the admin app. The audience the JWT middleware enforces. Empty = admin plane disabled.')
+param adminEntraAudience string = ''
+
 @description('Resource ID of the user-assigned managed identity the Function App uses at runtime. The same identity gets Cosmos data-plane access in cosmos.bicep; DefaultAzureCredential picks it up automatically when it is the only MI attached.')
 param userAssignedIdentityResourceId string
 
@@ -216,6 +222,12 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
         // binds AlwaysApproveAllowlistRepository (pre-allowlist behavior).
         { name: 'Auth__CosmosDatabase', value: 'notify' }
         { name: 'Auth__CosmosAllowedUsersContainer', value: 'allowedUsers' }
+        // Admin plane — Entra ID validation for /admin/*. Empty values
+        // (default) disable the admin plane: AdminAuthMiddleware returns 503
+        // until the maintainer runs the Entra bootstrap and feeds the values
+        // back via these params.
+        { name: 'Admin__EntraTenantId', value: adminEntraTenantId }
+        { name: 'Admin__EntraAudience', value: adminEntraAudience }
       ]
     }
   }

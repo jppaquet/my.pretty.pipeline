@@ -205,6 +205,67 @@ Function App resolves this via `@Microsoft.KeyVault(...)`; it'll pick up
 the new secret on its next cold start (or restart it: `az functionapp
 restart -g "$RG" -n <function-app-name>`).
 
+### Optional: enable the admin plane
+
+The `/admin/*` routes (used by the admin web app — see [admin/](../admin/))
+default to **disabled** — `AdminAuthMiddleware` returns `503 admin plane
+not configured` until you create an Entra app registration and feed the
+two ids back to bicep. Skip this section if you only need the iOS path.
+
+```sh
+TENANT=$(az account show --query tenantId -o tsv)
+
+# 1. Create the app registration. Single-tenant; SPA redirect for MSAL.js.
+ADMIN_APP=$(az ad app create --display-name "my.pretty.pipeline-admin" \
+  --sign-in-audience AzureADMyOrg \
+  --query appId -o tsv)
+
+# 2. Mint the Admin app role and patch it onto the registration. The role
+#    `value` is what lands in the JWT `roles` claim — EntraJwtValidator
+#    requires exactly "Admin" (configurable via Admin__RequiredRole).
+ROLE_JSON=$(jq -nc --arg id "$(uuidgen)" '
+  [{ id: $id, displayName: "Admin", description: "Manage producer keys and approve testers",
+     value: "Admin", isEnabled: true, allowedMemberTypes: ["User"] }]')
+az ad app update --id "$ADMIN_APP" --set "appRoles=$ROLE_JSON"
+
+# 3. Add the SPA redirect URI (filled in once you have the SWA hostname in
+#    PR-2 — for now leave this step until then). Same command:
+#    az ad app update --id "$ADMIN_APP" \
+#      --set "spa.redirectUris=['https://<swa>.azurestaticapps.net']"
+
+# 4. Assign yourself the Admin role.
+ME=$(az ad signed-in-user show --query id -o tsv)
+SP_ID=$(az ad sp create --id "$ADMIN_APP" --query id -o tsv 2>/dev/null \
+        || az ad sp show --id "$ADMIN_APP" --query id -o tsv)
+APP_ROLE_ID=$(echo "$ROLE_JSON" | jq -r '.[0].id')
+az rest --method POST \
+  --uri "https://graph.microsoft.com/v1.0/users/$ME/appRoleAssignments" \
+  --body "{\"principalId\":\"$ME\",\"resourceId\":\"$SP_ID\",\"appRoleId\":\"$APP_ROLE_ID\"}"
+
+# 5. Wire the audience into cd-deploy via a repo variable. tenantId is
+#    already in `AZURE_TENANT_ID`.
+gh variable set ADMIN_AAD_AUDIENCE --body "$ADMIN_APP"
+```
+
+Next `cd-deploy` run picks up `ADMIN_AAD_AUDIENCE` + `AZURE_TENANT_ID` and
+sets `Admin__EntraTenantId` / `Admin__EntraAudience` on the Function App.
+MFA is enforced through Entra **Security Defaults** (Free tier; on by
+default for new tenants since 2019). Verify in portal → Entra ID →
+Properties → "Security defaults" = Enabled.
+
+To smoke-test before the admin app exists:
+```sh
+TOKEN=$(az account get-access-token \
+  --resource "api://$ADMIN_APP" --query accessToken -o tsv)
+FN_HOST=$(az functionapp list -g "$RG" --query "[0].defaultHostName" -o tsv)
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "https://$FN_HOST/admin/allowlist" | jq .
+```
+
+You'll get `{"items":[…]}` once you can mint a token that carries the
+Admin role (CLI tokens require [`az login --scope api://$ADMIN_APP/.default`](https://learn.microsoft.com/en-us/cli/azure/account#az-account-get-access-token)
+or going through the SPA redirect flow).
+
 ## 8. Build + run the iOS app
 
 Open `app/Notify.xcodeproj` in Xcode. Pick your signing team in the

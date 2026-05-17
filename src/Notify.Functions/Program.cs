@@ -7,6 +7,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using Notify.Functions.Admin;
 using Notify.Functions.Archive;
 using Notify.Functions.Auth;
 using Notify.Functions.Devices;
@@ -24,8 +25,13 @@ using Notify.Shared.Json;
 var host = new HostBuilder()
     .ConfigureFunctionsWorkerDefaults(worker =>
     {
-        // JWT validation runs on every HTTP request. See JwtAuthMiddleware
-        // for the additive-then-required rollout plan.
+        // Two middlewares, both run on every HTTP request. AdminAuthMiddleware
+        // short-circuits the request only if the path matches `/admin/`;
+        // JwtAuthMiddleware short-circuits only when there's a Bearer header
+        // on a non-admin path. They are mutually exclusive on the request
+        // path, so order doesn't matter for correctness — putting Admin first
+        // means /admin/* requests skip the Apple JWKS fetch on the hot path.
+        worker.UseMiddleware<AdminAuthMiddleware>();
         worker.UseMiddleware<JwtAuthMiddleware>();
     })
     .ConfigureServices((ctx, services) =>
@@ -36,6 +42,7 @@ var host = new HostBuilder()
         services.AddOptions<PushOptions>().Bind(ctx.Configuration);
         services.AddOptions<InboxOptions>().Bind(ctx.Configuration);
         services.AddOptions<AuthOptions>().Bind(ctx.Configuration.GetSection("Auth"));
+        services.AddOptions<AdminOptions>().Bind(ctx.Configuration.GetSection("Admin"));
 
         // Single CosmosClient — both Ingestion (project lookup) and Archive
         // (notifications upsert) share it. Endpoint comes from IngestionOptions
@@ -138,6 +145,20 @@ var host = new HostBuilder()
             return new CosmosAllowlistRepository(
                 cosmos.GetContainer(opts.CosmosDatabase, opts.CosmosAllowedUsersContainer),
                 cache);
+        });
+
+        // ── Admin (Entra ID) ─────────────────────────────────────────────
+        // Mirrors the Apple-side wiring: HttpClient + cached JWKS fetcher +
+        // stateless validator. Handlers run against the same `allowedUsers`
+        // container the iOS-side allowlist gate writes to.
+        services.AddHttpClient<IEntraJwksProvider, EntraJwksProvider>();
+        services.AddSingleton<EntraJwtValidator>();
+        services.AddSingleton(sp =>
+        {
+            var opts = sp.GetRequiredService<IOptions<AuthOptions>>().Value;
+            var cosmos = sp.GetRequiredService<CosmosClient>();
+            return new AllowlistAdminHandler(
+                cosmos.GetContainer(opts.CosmosDatabase, opts.CosmosAllowedUsersContainer));
         });
     })
     .Build();
