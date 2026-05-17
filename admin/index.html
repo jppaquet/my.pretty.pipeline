@@ -29,25 +29,89 @@
     </section>
 
     <section id="content-section" hidden>
-      <h2>tester allowlist</h2>
-      <div class="row">
-        <button id="refresh-btn">refresh</button>
-        <span id="status" class="status"></span>
+      <nav class="tabs">
+        <button class="tab active" data-tab="allowlist">testers</button>
+        <button class="tab" data-tab="projects">projects</button>
+      </nav>
+
+      <!-- ── Testers tab ─────────────────────────────────────────────── -->
+      <div class="tab-panel" data-panel="allowlist">
+        <div class="row">
+          <button id="allowlist-refresh-btn">refresh</button>
+          <span id="allowlist-status" class="status"></span>
+        </div>
+        <table id="allowlist-table">
+          <thead>
+            <tr>
+              <th>sub</th>
+              <th>state</th>
+              <th>first seen</th>
+              <th>approved</th>
+              <th>action</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
       </div>
-      <table id="allowlist-table">
-        <thead>
-          <tr>
-            <th>sub</th>
-            <th>state</th>
-            <th>first seen</th>
-            <th>approved</th>
-            <th>action</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
+
+      <!-- ── Projects tab ─────────────────────────────────────────────── -->
+      <div class="tab-panel" data-panel="projects" hidden>
+        <div class="row">
+          <button id="project-mint-btn">mint new project</button>
+          <button id="projects-refresh-btn">refresh</button>
+          <span id="projects-status" class="status"></span>
+        </div>
+        <table id="projects-table">
+          <thead>
+            <tr>
+              <th>id</th>
+              <th>display name</th>
+              <th>state</th>
+              <th>action</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </section>
   </main>
+
+  <!-- ── Mint dialog ────────────────────────────────────────────────── -->
+  <dialog id="mint-dialog">
+    <div id="mint-form-step">
+      <h2>mint new project</h2>
+      <p class="muted">producer key is generated server-side and shown <strong>once</strong>. store it before closing the dialog.</p>
+      <label>
+        project id
+        <input id="mint-id" type="text" autocomplete="off" pattern="[A-Za-z0-9._-]+" maxlength="64" placeholder="e.g. Watchtower" required>
+        <small class="muted">A–Z, a–z, 0–9, . _ - · max 64</small>
+      </label>
+      <label>
+        display name
+        <input id="mint-name" type="text" autocomplete="off" maxlength="128" placeholder="e.g. Watchtower backups" required>
+      </label>
+      <div class="dialog-actions">
+        <button id="mint-cancel-btn" type="button">cancel</button>
+        <button id="mint-submit-btn" type="button">mint</button>
+      </div>
+      <span id="mint-error" class="status error"></span>
+    </div>
+    <div id="mint-result-step" hidden>
+      <h2>key minted ✓</h2>
+      <p class="muted">copy this key now — it will <strong>not be shown again</strong>. losing it means re-minting the project.</p>
+      <div class="key-display">
+        <code id="mint-key-value"></code>
+        <button id="mint-copy-btn" type="button">copy</button>
+      </div>
+      <label class="confirm-row">
+        <input type="checkbox" id="mint-stored-confirm">
+        I have stored this key in a safe place.
+      </label>
+      <div class="dialog-actions">
+        <button id="mint-done-btn" type="button" disabled>done</button>
+      </div>
+    </div>
+  </dialog>
 
   <script src="app.js"></script>
 </body>
