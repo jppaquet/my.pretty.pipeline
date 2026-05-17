@@ -9,7 +9,8 @@ namespace Notify.Auth.Tests;
 // out of scope here — these tests start from a known doc state and verify
 // approve / revoke behave correctly + idempotently.
 [Trait("Category", "Integration")]
-public class AllowlistAdminHandlerTests : IClassFixture<CosmosEmulatorFixture>
+[Collection("Cosmos")]
+public class AllowlistAdminHandlerTests
 {
     private readonly CosmosEmulatorFixture _fx;
 
