@@ -142,6 +142,12 @@ private func groupedSections(items: [InboxNotification], by grouping: InboxViewM
     }
 }
 
+#Preview("Inbox — Preview Data") {
+    let vm = InboxViewModel(api: MockNotifyAPI.previewSeeded())
+    vm.state = .loaded(items: MockNotifyAPI.previewSeeded().pages[0].items, continuationToken: nil)
+    return InboxView(viewModel: vm, selection: .constant(nil))
+}
+
 private func dayHeader(_ date: Date) -> String {
     let calendar = Calendar.current
     if calendar.isDateInToday(date) { return "Today" }

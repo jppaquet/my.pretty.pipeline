@@ -54,9 +54,11 @@ struct RootView: View {
             }
         }
         .task {
+            #if !LOCAL_UI_PREVIEW
             // Ask for push permission once. Token POST happens later when
             // AppDelegate gets `didRegisterForRemoteNotificationsWithDeviceToken`.
             _ = try? await container.push.requestAuthorization()
+            #endif
         }
     }
 

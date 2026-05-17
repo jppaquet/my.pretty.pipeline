@@ -19,7 +19,7 @@ final class InboxViewModel {
 
     var grouping: Grouping = .none
 
-    private(set) var state: State = .idle
+    var state: State = .idle
 
     private let api: NotifyAPI
     private let source: String?
