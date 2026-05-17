@@ -62,7 +62,11 @@ jobs:
           scope: resourcegroup
           resourceGroupName: ${{ vars.AZURE_RG_DEV }}
           template: infra/main.bicep
-          parameters: env=dev enableArchiveSubscription=false enablePushSubscription=false
+          # `adminEntra*` empty by default — admin plane stays disabled
+          # until the maintainer runs the Entra bootstrap and sets the
+          # `ADMIN_AAD_AUDIENCE` repo variable. tenantId reuses the same var
+          # `azure/login` is already pulling from.
+          parameters: env=dev enableArchiveSubscription=false enablePushSubscription=false adminEntraTenantId=${{ vars.AZURE_TENANT_ID }} adminEntraAudience=${{ vars.ADMIN_AAD_AUDIENCE }}
           failOnStdErr: false
 
       - name: Capture outputs
@@ -164,6 +168,8 @@ jobs:
             env=dev
             enableArchiveSubscription=${{ needs.deploy-infra.outputs.enable_archive_sub }}
             enablePushSubscription=${{ needs.deploy-infra.outputs.enable_push_sub }}
+            adminEntraTenantId=${{ vars.AZURE_TENANT_ID }}
+            adminEntraAudience=${{ vars.ADMIN_AAD_AUDIENCE }}
           failOnStdErr: false
 
   # E2E runs against the deployed Function App after EG subs (if any) are

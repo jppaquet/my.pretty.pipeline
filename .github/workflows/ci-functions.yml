@@ -45,13 +45,11 @@ jobs:
       cosmos:
         image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:latest
         env:
-          # `dotnet test Notify.slnx` discovers every test assembly and runs
-          # them in parallel processes. Each emulator-using assembly
-          # (Archive, Inbox, Auth) creates its own database concurrently;
-          # partition count = 3 was already tight for 2 assemblies and
-          # timed out at 3 (PR-allowlist). 10 gives enough physical
-          # partitions to keep CreateDatabase/Container calls under the
-          # 10 s client timeout.
+          # Bumped from 3 → 10 partitions to give CreateDatabase/Container
+          # headroom. Combined with the serialized integration-test pass
+          # below, this is belt-and-suspenders: serialization keeps
+          # concurrent emulator load to one assembly, and the extra
+          # partitions absorb any in-flight burst within an assembly.
           AZURE_COSMOS_EMULATOR_PARTITION_COUNT: "10"
           AZURE_COSMOS_EMULATOR_ENABLE_DATA_PERSISTENCE: "false"
         ports:
@@ -99,14 +97,40 @@ jobs:
           sudo cp /tmp/cosmos.pem /usr/local/share/ca-certificates/cosmos.crt
           sudo update-ca-certificates
 
-      - name: Unit + integration tests
+      # Two-phase test run. The Cosmos Linux emulator's CreateContainer /
+      # CreateDatabase calls are heavy and CPU-bound; when multiple test
+      # assemblies fire those concurrently the emulator tips into 65-second
+      # 408 timeouts. `dotnet test Notify.slnx` runs assemblies in parallel
+      # by default, which used to take this CI step to ~20% flake. Splitting
+      # into one parallel unit pass + a serialized per-project integration
+      # pass keeps emulator load to one assembly at a time.
+      - name: Unit tests (parallel across the solution)
         run: |
           dotnet test Notify.slnx \
             --configuration Release \
             --no-build \
-            --logger "trx;LogFileName=test-results.trx" \
+            --filter "Category!=Integration" \
+            --logger "trx;LogFileName=unit.trx" \
             --collect:"XPlat Code Coverage" \
             --results-directory ./TestResults
+
+      - name: Integration tests (serialized; one assembly at a time)
+        run: |
+          set -e
+          for proj in \
+            tests/Notify.Archive.Tests \
+            tests/Notify.Inbox.Tests \
+            tests/Notify.Auth.Tests
+          do
+            echo "── $proj ──"
+            dotnet test "$proj" \
+              --configuration Release \
+              --no-build \
+              --filter "Category=Integration" \
+              --logger "trx;LogFileName=$(basename $proj).trx" \
+              --collect:"XPlat Code Coverage" \
+              --results-directory ./TestResults
+          done
 
       - name: Upload test results
         if: always()

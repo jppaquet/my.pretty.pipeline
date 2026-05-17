@@ -44,6 +44,16 @@ public sealed class JwtAuthMiddleware : IFunctionsWorkerMiddleware
             return;
         }
 
+        // /admin/* requests carry Entra tokens, not Apple. AdminAuthMiddleware
+        // owns that path; this middleware passes through without trying to
+        // validate the Bearer header as a Sign-in-with-Apple JWT (which would
+        // 401 every legitimate admin request).
+        if (http.Url.AbsolutePath.StartsWith("/admin/", StringComparison.OrdinalIgnoreCase))
+        {
+            await next(context);
+            return;
+        }
+
         if (!TryExtractBearer(http, out var token))
         {
             await next(context);
