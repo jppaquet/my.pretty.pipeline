@@ -26,6 +26,7 @@ public sealed class CosmosEmulatorFixture : IAsyncLifetime
 
     public CosmosClient Client { get; private set; } = null!;
     public Container AllowedUsers { get; private set; } = null!;
+    public Container Projects { get; private set; } = null!;
     private string _databaseId = "";
 
     public async Task InitializeAsync()
@@ -45,12 +46,26 @@ public sealed class CosmosEmulatorFixture : IAsyncLifetime
 
         _databaseId = $"notify-test-{Guid.NewGuid():N}";
         var db = await Client.CreateDatabaseAsync(_databaseId);
-        var container = await db.Database.CreateContainerAsync(new ContainerProperties
+
+        var allowed = await db.Database.CreateContainerAsync(new ContainerProperties
         {
             Id = "allowedUsers",
             PartitionKeyPath = "/id",
         });
-        AllowedUsers = container.Container;
+        AllowedUsers = allowed.Container;
+
+        // Shared across every projects-admin test method in this assembly.
+        // We deliberately don't create one-container-per-test: with the
+        // emulator's `AZURE_COSMOS_EMULATOR_PARTITION_COUNT=10` ceiling,
+        // 10 ProjectsAdminHandlerTests × 1 container each would exhaust
+        // the pool and trip 503s. Tests use unique projectIds per mint
+        // so isolation is preserved even with shared storage.
+        var projects = await db.Database.CreateContainerAsync(new ContainerProperties
+        {
+            Id = "projects",
+            PartitionKeyPath = "/projectId",
+        });
+        Projects = projects.Container;
     }
 
     public async Task DisposeAsync()

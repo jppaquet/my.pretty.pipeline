@@ -21,24 +21,17 @@ public class ProjectsAdminHandlerTests
     // in one test could (in principle) be verified by another instance.
     private static readonly byte[] TestPepper = "0123456789abcdef0123456789abcdef"u8.ToArray();
 
-    private async Task<Container> ProjectsContainerAsync()
-    {
-        var db = _fx.Client.GetDatabase(_fx.AllowedUsers.Database.Id);
-        var resp = await db.CreateContainerIfNotExistsAsync(new ContainerProperties
-        {
-            Id = "projects-" + Guid.NewGuid().ToString("N"),
-            PartitionKeyPath = "/projectId",
-        });
-        return resp.Container;
-    }
-
-    private async Task<ProjectsAdminHandler> BuildHandler() =>
-        new(await ProjectsContainerAsync(), new ApiKeyHasher(TestPepper));
+    // Shared container — see CosmosEmulatorFixture. Tests use unique
+    // project ids per Mint to avoid stomping on each other. Creating one
+    // container per test exhausts the emulator's
+    // AZURE_COSMOS_EMULATOR_PARTITION_COUNT=10 and trips 503s.
+    private ProjectsAdminHandler BuildHandler() =>
+        new(_fx.Projects, new ApiKeyHasher(TestPepper));
 
     [Fact]
     public async Task Mint_returns_cleartext_key_in_npk_format()
     {
-        var handler = await BuildHandler();
+        var handler = BuildHandler();
         var result = await handler.MintAsync("test-mint", "Test Mint");
 
         var ok = Assert.IsType<ProjectMutationResult.OkWithKey>(result);
@@ -52,16 +45,15 @@ public class ProjectsAdminHandlerTests
     [Fact]
     public async Task Mint_persists_hash_that_round_trips_through_verify()
     {
-        var container = await ProjectsContainerAsync();
         var hasher = new ApiKeyHasher(TestPepper);
-        var handler = new ProjectsAdminHandler(container, hasher);
+        var handler = new ProjectsAdminHandler(_fx.Projects, hasher);
 
         var result = (ProjectMutationResult.OkWithKey)await handler.MintAsync("verify-roundtrip", "Roundtrip");
         var key = result.PlaintextKey;
 
         // Read the persisted doc directly and feed it back to Verify — this
         // is what the Ingest path does on every producer call.
-        var read = await container.ReadItemAsync<ProjectDocument>("verify-roundtrip", new PartitionKey("verify-roundtrip"));
+        var read = await _fx.Projects.ReadItemAsync<ProjectDocument>("verify-roundtrip", new PartitionKey("verify-roundtrip"));
         Assert.True(hasher.Verify(key, read.Resource.Salt, read.Resource.KeyHash),
             "minted key should verify against the persisted salt + hash");
         Assert.False(hasher.Verify(key + "tampered", read.Resource.Salt, read.Resource.KeyHash));
@@ -70,9 +62,7 @@ public class ProjectsAdminHandlerTests
     [Fact]
     public async Task Mint_rejects_duplicate_id_with_already_exists()
     {
-        var container = await ProjectsContainerAsync();
-        var handler = new ProjectsAdminHandler(container, new ApiKeyHasher(TestPepper));
-
+        var handler = BuildHandler();
         Assert.IsType<ProjectMutationResult.OkWithKey>(await handler.MintAsync("dup", "First"));
         Assert.IsType<ProjectMutationResult.AlreadyExists>(await handler.MintAsync("dup", "Second"));
     }
@@ -85,7 +75,7 @@ public class ProjectsAdminHandlerTests
     [InlineData("has#hash", "allowed chars")]
     public async Task Mint_rejects_invalid_project_ids(string id, string expectedSubstring)
     {
-        var handler = await BuildHandler();
+        var handler = BuildHandler();
         var result = await handler.MintAsync(id, "ignored");
         var inv = Assert.IsType<ProjectMutationResult.InvalidInput>(result);
         Assert.Equal("projectId", inv.Field);
@@ -95,7 +85,7 @@ public class ProjectsAdminHandlerTests
     [Fact]
     public async Task Mint_rejects_oversized_id()
     {
-        var handler = await BuildHandler();
+        var handler = BuildHandler();
         var tooLong = new string('a', 65);
         var inv = Assert.IsType<ProjectMutationResult.InvalidInput>(await handler.MintAsync(tooLong, "ok"));
         Assert.Equal("projectId", inv.Field);
@@ -104,7 +94,7 @@ public class ProjectsAdminHandlerTests
     [Fact]
     public async Task Mint_rejects_missing_display_name()
     {
-        var handler = await BuildHandler();
+        var handler = BuildHandler();
         var inv = Assert.IsType<ProjectMutationResult.InvalidInput>(await handler.MintAsync("ok-id", ""));
         Assert.Equal("displayName", inv.Field);
     }
@@ -112,16 +102,16 @@ public class ProjectsAdminHandlerTests
     [Fact]
     public async Task List_returns_minted_projects_without_salt_or_hash()
     {
-        var container = await ProjectsContainerAsync();
-        var handler = new ProjectsAdminHandler(container, new ApiKeyHasher(TestPepper));
-
+        var handler = BuildHandler();
         await handler.MintAsync("list-a", "A");
         await handler.MintAsync("list-b", "B");
 
         var items = await handler.ListAsync();
-        var byId = items.ToDictionary(p => p.Id);
-        Assert.True(byId.ContainsKey("list-a"));
-        Assert.True(byId.ContainsKey("list-b"));
+        var ids = items.Select(p => p.Id).ToHashSet();
+        // Shared container: other tests may have already minted rows.
+        // Assert containment, not exact equality.
+        Assert.Contains("list-a", ids);
+        Assert.Contains("list-b", ids);
         // ProjectSummary's shape doesn't carry salt / hash fields — that
         // invariant is enforced by the record itself (no constructor
         // arguments for them), so reaching this assertion is the proof.
@@ -130,7 +120,7 @@ public class ProjectsAdminHandlerTests
     [Fact]
     public async Task Revoke_flips_active_to_false()
     {
-        var handler = await BuildHandler();
+        var handler = BuildHandler();
         await handler.MintAsync("revoke-target", "RT");
 
         var result = await handler.RevokeAsync("revoke-target");
@@ -145,7 +135,7 @@ public class ProjectsAdminHandlerTests
     [Fact]
     public async Task Revoke_is_idempotent()
     {
-        var handler = await BuildHandler();
+        var handler = BuildHandler();
         await handler.MintAsync("revoke-twice", "RT");
         Assert.IsType<ProjectMutationResult.Ok>(await handler.RevokeAsync("revoke-twice"));
         Assert.IsType<ProjectMutationResult.Ok>(await handler.RevokeAsync("revoke-twice"));
@@ -154,7 +144,7 @@ public class ProjectsAdminHandlerTests
     [Fact]
     public async Task Revoke_on_unknown_id_returns_not_found()
     {
-        var handler = await BuildHandler();
+        var handler = BuildHandler();
         Assert.IsType<ProjectMutationResult.NotFound>(await handler.RevokeAsync("never-existed-" + Guid.NewGuid().ToString("N")));
     }
 }
