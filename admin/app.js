@@ -310,6 +310,91 @@
     await loadProjects();
   });
 
+  // ── send-test tab ──────────────────────────────────────────────────
+  // Posts directly to /v1/notifications with x-api-key. We deliberately
+  // *don't* proxy this through an admin endpoint — the point of the smoke
+  // test is to exercise the producer-auth boundary too. The Function App
+  // CORS rule lets the SWA origin through and echoes requested headers on
+  // preflight, so x-api-key works without further config.
+  //
+  // Project id round-trips through localStorage so the operator doesn't
+  // re-type it on every visit. The key never touches storage.
+  const ST_LS_KEY = "send-test.projectId";
+  const stProjectId = $("st-project-id");
+  const stKey = $("st-key");
+  const stType = $("st-type");
+  const stPriority = $("st-priority");
+  const stTitle = $("st-title");
+  const stBody = $("st-body");
+  const stTags = $("st-tags");
+  const stResult = $("st-result");
+
+  stProjectId.value = localStorage.getItem(ST_LS_KEY) || "";
+  stProjectId.addEventListener("change", () => {
+    if (stProjectId.value) localStorage.setItem(ST_LS_KEY, stProjectId.value);
+    else localStorage.removeItem(ST_LS_KEY);
+  });
+
+  $("st-send-btn").addEventListener("click", async (e) => {
+    e.preventDefault();
+    setStatus("st-status", "");
+    stResult.hidden = true;
+    stResult.classList.remove("error");
+
+    const projectId = stProjectId.value.trim();
+    const key = stKey.value.trim();
+    const title = stTitle.value.trim();
+    const body = stBody.value.trim();
+    if (!projectId || !key || !title || !body) {
+      setStatus("st-status", "all required fields must be set", true);
+      return;
+    }
+    if (!key.startsWith("npk_")) {
+      setStatus("st-status", "producer key must start with npk_", true);
+      return;
+    }
+
+    const tags = stTags.value
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+
+    const payload = {
+      source: projectId,
+      type: stType.value,
+      title,
+      body,
+      priority: stPriority.value,
+      tags,
+    };
+
+    $("st-send-btn").disabled = true;
+    setStatus("st-status", "sending…");
+    try {
+      const r = await fetch(cfg.apiBase + "/v1/notifications", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": key,
+        },
+        body: JSON.stringify(payload),
+      });
+      const text = await r.text();
+      stResult.hidden = false;
+      stResult.textContent = "HTTP " + r.status + "\n" + (text || "(empty body)");
+      if (r.ok) {
+        setStatus("st-status", "sent");
+      } else {
+        stResult.classList.add("error");
+        setStatus("st-status", "HTTP " + r.status, true);
+      }
+    } catch (err) {
+      setStatus("st-status", err.message, true);
+    } finally {
+      $("st-send-btn").disabled = false;
+    }
+  });
+
   // ── helpers ─────────────────────────────────────────────────────────
   function fmt(iso) {
     if (!iso) return "—";

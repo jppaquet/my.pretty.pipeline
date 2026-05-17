@@ -32,6 +32,7 @@
       <nav class="tabs">
         <button class="tab active" data-tab="allowlist">testers</button>
         <button class="tab" data-tab="projects">projects</button>
+        <button class="tab" data-tab="send-test">send test</button>
       </nav>
 
       <!-- ── Testers tab ─────────────────────────────────────────────── -->
@@ -72,6 +73,64 @@
           </thead>
           <tbody></tbody>
         </table>
+      </div>
+
+      <!-- ── Send-test tab ────────────────────────────────────────────── -->
+      <div class="tab-panel" data-panel="send-test" hidden>
+        <p class="muted">
+          Posts a notification through <code>POST /v1/notifications</code>
+          with the producer key you paste below. Exercises the full
+          pipeline: Ingest → EventGrid → Archive + Push → APNs → device.
+          Project id and key must come from the <strong>projects</strong>
+          tab (or whatever you previously minted).
+        </p>
+        <form id="send-test-form" class="card">
+          <label>
+            project id
+            <input id="st-project-id" type="text" autocomplete="off" placeholder="e.g. Watchtower" required>
+          </label>
+          <label>
+            producer key
+            <input id="st-key" type="password" autocomplete="off" placeholder="npk_…" required>
+            <small class="muted">never persisted by this page — kept only in memory for the request</small>
+          </label>
+          <div class="form-row-2">
+            <label>
+              type
+              <select id="st-type">
+                <option>info</option>
+                <option>warning</option>
+                <option>alert</option>
+              </select>
+            </label>
+            <label>
+              priority
+              <select id="st-priority">
+                <option>low</option>
+                <option selected>normal</option>
+                <option>high</option>
+              </select>
+            </label>
+          </div>
+          <label>
+            title
+            <input id="st-title" type="text" maxlength="120" placeholder="hello from admin" value="hello from admin" required>
+          </label>
+          <label>
+            body
+            <textarea id="st-body" maxlength="2000" rows="3" required>smoke test from the admin SPA.</textarea>
+          </label>
+          <label>
+            tags
+            <input id="st-tags" type="text" autocomplete="off" placeholder="smoke-test,admin" value="smoke-test,admin">
+            <small class="muted">comma-separated, [A-Za-z0-9._-], max 10 tags · "global" reserved</small>
+          </label>
+          <div class="dialog-actions">
+            <button id="st-send-btn" type="button">send</button>
+          </div>
+          <pre id="st-result" class="result-pane" hidden></pre>
+          <span id="st-status" class="status"></span>
+        </form>
       </div>
     </section>
   </main>
