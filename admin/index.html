@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>my.pretty.pipeline — admin</title>
+  <link rel="stylesheet" href="app.css">
+  <!-- MSAL Browser via Microsoft CDN. Pinned to a 3.x build; the SDK is
+       backwards-compatible within 3.x. CSP in staticwebapp.config.json
+       only allows scripts from this origin + alcdn.msauth.net. -->
+  <script src="https://alcdn.msauth.net/browser/3.20.0/js/msal-browser.min.js"
+          integrity="sha384-h7sbAYNo30CtgKchu+rJBuMTH+T62FBlmiD2X+QrXxxslwLU+yLZUWWY3afgRZqg"
+          crossorigin="anonymous"></script>
+  <script src="config.js"></script>
+</head>
+<body>
+  <header>
+    <h1>admin</h1>
+    <div id="user-bar">
+      <span id="user-label"></span>
+      <button id="signout-btn" hidden>sign out</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="signin-section">
+      <p>Sign in with your Entra ID to manage the pipeline.</p>
+      <button id="signin-btn">Sign in</button>
+    </section>
+
+    <section id="content-section" hidden>
+      <h2>tester allowlist</h2>
+      <div class="row">
+        <button id="refresh-btn">refresh</button>
+        <span id="status" class="status"></span>
+      </div>
+      <table id="allowlist-table">
+        <thead>
+          <tr>
+            <th>sub</th>
+            <th>state</th>
+            <th>first seen</th>
+            <th>approved</th>
+            <th>action</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

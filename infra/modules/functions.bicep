@@ -40,6 +40,9 @@ param adminEntraTenantId string = ''
 @description('Entra ID app registration `appId` (client id) for the admin app. The audience the JWT middleware enforces. Empty = admin plane disabled.')
 param adminEntraAudience string = ''
 
+@description('Origin of the admin Static Web App (e.g. `https://swa-notify-dev-xxxxx.centralus.azurestaticapps.net`). Added to the Function App siteConfig.cors.allowedOrigins so the admin SPA can call /admin/* from a different origin. Empty = no CORS rule added.')
+param adminAllowedOrigin string = ''
+
 @description('Resource ID of the user-assigned managed identity the Function App uses at runtime. The same identity gets Cosmos data-plane access in cosmos.bicep; DefaultAzureCredential picks it up automatically when it is the only MI attached.')
 param userAssignedIdentityResourceId string
 
@@ -185,6 +188,15 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
     siteConfig: {
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'
+      // CORS allowed-origins. iOS app calls /v1/* same-origin via the
+      // Function App hostname (no CORS needed). The admin SPA, however,
+      // is served from a `*.azurestaticapps.net` host and calls /admin/*
+      // cross-origin — without this entry, browsers reject the response
+      // before AdminAuthMiddleware ever sees the request.
+      cors: empty(adminAllowedOrigin) ? null : {
+        allowedOrigins: [ adminAllowedOrigin ]
+        supportCredentials: false
+      }
       appSettings: [
         // AzureWebJobsStorage in MI form. Three settings instead of one
         // connection string — the host probes for `__accountName`, infers
