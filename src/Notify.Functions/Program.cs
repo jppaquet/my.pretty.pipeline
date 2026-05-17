@@ -160,6 +160,19 @@ var host = new HostBuilder()
             return new AllowlistAdminHandler(
                 cosmos.GetContainer(opts.CosmosDatabase, opts.CosmosAllowedUsersContainer));
         });
+        services.AddSingleton(sp =>
+        {
+            // Projects admin handler reuses the existing IngestionOptions
+            // pointer to the projects container + the same ApiKeyHasher the
+            // Ingest path verifies against, so admin-minted keys round-trip
+            // through Ingest without any second hash contract.
+            var opts = sp.GetRequiredService<IOptions<IngestionOptions>>().Value;
+            var cosmos = sp.GetRequiredService<CosmosClient>();
+            var hasher = sp.GetRequiredService<ApiKeyHasher>();
+            return new ProjectsAdminHandler(
+                cosmos.GetContainer(opts.CosmosDatabase, opts.CosmosProjectsContainer),
+                hasher);
+        });
     })
     .Build();
 
