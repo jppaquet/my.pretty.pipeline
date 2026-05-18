@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>my.pretty.pipeline — admin</title>
+  <link rel="stylesheet" href="app.css">
+  <!-- MSAL Browser via Microsoft CDN. Pinned to a 3.x build; the SDK is
+       backwards-compatible within 3.x. CSP in staticwebapp.config.json
+       only allows scripts from this origin + alcdn.msauth.net. -->
+  <script src="https://alcdn.msauth.net/browser/3.20.0/js/msal-browser.min.js"
+          integrity="sha384-h7sbAYNo30CtgKchu+rJBuMTH+T62FBlmiD2X+QrXxxslwLU+yLZUWWY3afgRZqg"
+          crossorigin="anonymous"></script>
+  <script src="config.js"></script>
+</head>
+<body>
+  <header>
+    <h1>admin</h1>
+    <div id="user-bar">
+      <span id="user-label"></span>
+      <button id="signout-btn" hidden>sign out</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="signin-section">
+      <p>Sign in with your Entra ID to manage the pipeline.</p>
+      <button id="signin-btn">Sign in</button>
+    </section>
+
+    <section id="content-section" hidden>
+      <nav class="tabs">
+        <button class="tab active" data-tab="allowlist">testers</button>
+        <button class="tab" data-tab="projects">projects</button>
+        <button class="tab" data-tab="send-test">send test</button>
+      </nav>
+
+      <!-- ── Testers tab ─────────────────────────────────────────────── -->
+      <div class="tab-panel" data-panel="allowlist">
+        <div class="row">
+          <button id="allowlist-refresh-btn">refresh</button>
+          <span id="allowlist-status" class="status"></span>
+        </div>
+        <table id="allowlist-table">
+          <thead>
+            <tr>
+              <th>sub</th>
+              <th>state</th>
+              <th>first seen</th>
+              <th>approved</th>
+              <th>action</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <!-- ── Projects tab ─────────────────────────────────────────────── -->
+      <div class="tab-panel" data-panel="projects" hidden>
+        <div class="row">
+          <button id="project-mint-btn">mint new project</button>
+          <button id="projects-refresh-btn">refresh</button>
+          <span id="projects-status" class="status"></span>
+        </div>
+        <table id="projects-table">
+          <thead>
+            <tr>
+              <th>id</th>
+              <th>display name</th>
+              <th>state</th>
+              <th>action</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <!-- ── Send-test tab ────────────────────────────────────────────── -->
+      <div class="tab-panel" data-panel="send-test" hidden>
+        <p class="muted">
+          Posts a notification through <code>POST /v1/notifications</code>
+          with the producer key you paste below. Exercises the full
+          pipeline: Ingest → EventGrid → Archive + Push → APNs → device.
+          Project id and key must come from the <strong>projects</strong>
+          tab (or whatever you previously minted).
+        </p>
+        <form id="send-test-form" class="card">
+          <label>
+            project id
+            <input id="st-project-id" type="text" autocomplete="off" placeholder="e.g. Watchtower" required>
+          </label>
+          <label>
+            producer key
+            <input id="st-key" type="password" autocomplete="off" placeholder="npk_…" required>
+            <small class="muted">never persisted by this page — kept only in memory for the request</small>
+          </label>
+          <div class="form-row-2">
+            <label>
+              type
+              <select id="st-type">
+                <option>info</option>
+                <option>warning</option>
+                <option>alert</option>
+              </select>
+            </label>
+            <label>
+              priority
+              <select id="st-priority">
+                <option>low</option>
+                <option selected>normal</option>
+                <option>high</option>
+              </select>
+            </label>
+          </div>
+          <label>
+            title
+            <input id="st-title" type="text" maxlength="120" placeholder="hello from admin" value="hello from admin" required>
+          </label>
+          <label>
+            body
+            <textarea id="st-body" maxlength="2000" rows="3" required>smoke test from the admin SPA.</textarea>
+          </label>
+          <label>
+            tags
+            <input id="st-tags" type="text" autocomplete="off" placeholder="smoke-test,admin" value="smoke-test,admin">
+            <small class="muted">comma-separated, [A-Za-z0-9._-], max 10 tags · "global" reserved</small>
+          </label>
+          <div class="dialog-actions">
+            <button id="st-send-btn" type="button">send</button>
+          </div>
+          <pre id="st-result" class="result-pane" hidden></pre>
+          <span id="st-status" class="status"></span>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <!-- ── Mint dialog ────────────────────────────────────────────────── -->
+  <dialog id="mint-dialog">
+    <div id="mint-form-step">
+      <h2>mint new project</h2>
+      <p class="muted">producer key is generated server-side and shown <strong>once</strong>. store it before closing the dialog.</p>
+      <label>
+        project id
+        <input id="mint-id" type="text" autocomplete="off" pattern="[A-Za-z0-9._-]+" maxlength="64" placeholder="e.g. Watchtower" required>
+        <small class="muted">A–Z, a–z, 0–9, . _ - · max 64</small>
+      </label>
+      <label>
+        display name
+        <input id="mint-name" type="text" autocomplete="off" maxlength="128" placeholder="e.g. Watchtower backups" required>
+      </label>
+      <div class="dialog-actions">
+        <button id="mint-cancel-btn" type="button">cancel</button>
+        <button id="mint-submit-btn" type="button">mint</button>
+      </div>
+      <span id="mint-error" class="status error"></span>
+    </div>
+    <div id="mint-result-step" hidden>
+      <h2>key minted ✓</h2>
+      <p class="muted">copy this key now — it will <strong>not be shown again</strong>. losing it means re-minting the project.</p>
+      <div class="key-display">
+        <code id="mint-key-value"></code>
+        <button id="mint-copy-btn" type="button">copy</button>
+      </div>
+      <label class="confirm-row">
+        <input type="checkbox" id="mint-stored-confirm">
+        I have stored this key in a safe place.
+      </label>
+      <div class="dialog-actions">
+        <button id="mint-done-btn" type="button" disabled>done</button>
+      </div>
+    </div>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
