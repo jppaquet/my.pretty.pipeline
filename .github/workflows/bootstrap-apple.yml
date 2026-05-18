@@ -45,6 +45,11 @@ permissions:
   id-token: write   # OIDC into Azure
   contents: read
 
+# See cd-deploy.yml for context — opts Azure-org actions still on Node 20
+# into Node 24 ahead of the June 2 2026 forced cutover.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   wire-apns:
     runs-on: ubuntu-latest

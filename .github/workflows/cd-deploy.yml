@@ -18,6 +18,15 @@ concurrency:
   group: cd-deploy-dev
   cancel-in-progress: false
 
+# Opt every JavaScript action in this workflow into the Node 24 runtime
+# ahead of the June 2 2026 forced cutover. Some Azure-org actions
+# (azure/arm-deploy@v2, azure/login@v3) still declare Node 20 in their
+# action.yml and trip a deprecation warning on every run; this env var
+# overrides that per the documented migration path:
+# https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   # Pass 1: deploy infra with all EG-function subscriptions disabled.
   # ARM validates EG sub endpoints against registered functions, which don't
