@@ -24,7 +24,7 @@ public sealed class AllowlistAdminFunction
 
     [Function("AdminListAllowlist")]
     public async Task<HttpResponseData> List(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "admin/allowlist")]
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "v1/admin/allowlist")]
         HttpRequestData req,
         FunctionContext ctx)
     {
@@ -35,7 +35,7 @@ public sealed class AllowlistAdminFunction
 
     [Function("AdminApproveAllowlist")]
     public async Task<HttpResponseData> Approve(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "admin/allowlist/{sub}/approve")]
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "v1/admin/allowlist/{sub}/approve")]
         HttpRequestData req,
         FunctionContext ctx,
         string sub)
@@ -52,7 +52,7 @@ public sealed class AllowlistAdminFunction
 
     [Function("AdminRevokeAllowlist")]
     public async Task<HttpResponseData> Revoke(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "admin/allowlist/{sub}/revoke")]
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "v1/admin/allowlist/{sub}/revoke")]
         HttpRequestData req,
         FunctionContext ctx,
         string sub)

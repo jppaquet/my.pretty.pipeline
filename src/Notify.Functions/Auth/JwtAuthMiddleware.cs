@@ -44,11 +44,13 @@ public sealed class JwtAuthMiddleware : IFunctionsWorkerMiddleware
             return;
         }
 
-        // /admin/* requests carry Entra tokens, not Apple. AdminAuthMiddleware
+        // /v1/admin/* requests carry Entra tokens, not Apple. AdminAuthMiddleware
         // owns that path; this middleware passes through without trying to
         // validate the Bearer header as a Sign-in-with-Apple JWT (which would
-        // 401 every legitimate admin request).
-        if (http.Url.AbsolutePath.StartsWith("/admin/", StringComparison.OrdinalIgnoreCase))
+        // 401 every legitimate admin request). Path matches the route prefix
+        // declared on AdminAuthMiddleware — kept under /v1/admin/ rather than
+        // bare /admin/ because the host reserves /admin/* for its own API.
+        if (http.Url.AbsolutePath.StartsWith("/v1/admin/", StringComparison.OrdinalIgnoreCase))
         {
             await next(context);
             return;

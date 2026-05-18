@@ -23,7 +23,12 @@ namespace Notify.Functions.Admin;
 public sealed class AdminAuthMiddleware : IFunctionsWorkerMiddleware
 {
     public const string UserContextKey = "AdminUser";
-    public const string RoutePrefix = "/admin/";
+    // Under `/v1/admin/`, not bare `/admin/` — the Functions host reserves
+    // `/admin/*` for its own runtime administration API (/admin/host/status,
+    // /admin/functions/<name>, /admin/vfs/<path>) and intercepts requests
+    // before any HttpTrigger gets routed. Using `/v1/admin/` keeps us in the
+    // same `/v1/` family as the iOS-facing routes and out of host territory.
+    public const string RoutePrefix = "/v1/admin/";
 
     private readonly ILogger<AdminAuthMiddleware> _logger;
     private readonly IOptions<AdminOptions> _opts;
