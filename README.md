@@ -50,11 +50,14 @@ Phases 0–3 done end-to-end on the dev RG: ingestion, archive, push fan-out, pe
 ## Local dev
 
 ```sh
-bash scripts/install-hooks.sh   # one-time per clone
-docker compose up -d            # Azurite + Cosmos emulator + EG stub
-cd src && dotnet test
+bash scripts/install-hooks.sh                              # one-time per clone
+cd src && dotnet test --filter Category!=Integration       # pure unit suite (~few s, no Docker)
+docker compose up -d                                       # boots Cosmos emulator only
+cd src && dotnet test --filter Category=Integration        # Archive + Inbox + Auth suites
 open app/Notify.xcodeproj
 ```
+
+Apple Silicon: the Cosmos image is amd64; Docker Desktop runs it under Rosetta. First boot is slow (60–120 s health-check); subsequent test runs are fast.
 
 ## Forking?
 

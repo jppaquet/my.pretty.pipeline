@@ -1,40 +1,34 @@
-# Local-dev parity for integration tests. Same image versions used in CI services
-# blocks (.github/workflows/ci-functions.yml).
+# Local Cosmos emulator for integration tests. Mirrors the `cosmos` service
+# block in .github/workflows/ci-functions.yml so what passes in CI passes
+# locally (and vice versa).
 #
 # Usage:
-#   docker compose up -d
-#   cd src && dotnet test
-#   docker compose down -v   # tear down + clear emulator state
+#   docker compose up -d                                # boot emulator, wait for healthy
+#   cd src && dotnet test --filter Category=Integration # Archive + Inbox + Auth suites
+#   docker compose down -v                              # tear down + clear emulator state
+#
+# Test fixtures default to `https://localhost:8081` (CosmosEmulatorFixture.cs)
+# so no env vars are needed — pure unit tests run via `dotnet test --filter
+# Category!=Integration` without the emulator up.
+#
+# Apple Silicon note: the published image is amd64 only; Docker Desktop runs
+# it through Rosetta on M-series Macs. Startup is slow (60–120 s); once
+# healthy, integration tests run in a few seconds. If you need a faster
+# path, Microsoft's `vnext-preview` tag has ARM support but different
+# defaults — switching needs fixture updates.
 
 services:
-  azurite:
-    image: mcr.microsoft.com/azure-storage/azurite:latest
-    container_name: notify-azurite
-    command: >-
-      azurite
-      --blobHost 0.0.0.0
-      --queueHost 0.0.0.0
-      --tableHost 0.0.0.0
-      --location /data
-      --skipApiVersionCheck
-    ports:
-      - "10000:10000"   # Blob
-      - "10001:10001"   # Queue
-      - "10002:10002"   # Table
-    volumes:
-      - azurite-data:/data
-    healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "10000"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-
   cosmos:
-    # Heavy (~3 GB RAM) but stable; vNext preview is faster but not yet GA.
     image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:latest
     container_name: notify-cosmos
     environment:
-      AZURE_COSMOS_EMULATOR_PARTITION_COUNT: "3"
+      # Bumped from 3 to 10 to match ci-functions.yml. Three was tight for
+      # two integration-test assemblies and tipped the emulator into 503s
+      # once Auth tests were added. Ten gives enough physical partitions
+      # to keep CreateDatabase + CreateContainer under the client timeout
+      # even with the per-test-method containers ProjectsAdminHandlerTests
+      # creates.
+      AZURE_COSMOS_EMULATOR_PARTITION_COUNT: "10"
       AZURE_COSMOS_EMULATOR_ENABLE_DATA_PERSISTENCE: "false"
       AZURE_COSMOS_EMULATOR_IP_ADDRESS_OVERRIDE: "127.0.0.1"
     ports:
@@ -46,24 +40,3 @@ services:
       timeout: 5s
       retries: 30
       start_period: 90s
-
-  # Tiny CloudEvents receiver — stands in for an Event Grid topic so integration
-  # tests can assert "the right CloudEvent was published" without hitting Azure.
-  # Phase 1 will replace this dockerfile-less stub with a real one when we add
-  # the actual `Notify.IngestionApi` integration tests.
-  eventgrid-stub:
-    image: mendhak/http-https-echo:31
-    container_name: notify-eventgrid-stub
-    environment:
-      HTTP_PORT: "8080"
-      LOG_WITHOUT_NEWLINE: "true"
-    ports:
-      - "8080:8080"
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q -O- http://localhost:8080 || exit 1"]
-      interval: 5s
-      timeout: 2s
-      retries: 5
-
-volumes:
-  azurite-data:
