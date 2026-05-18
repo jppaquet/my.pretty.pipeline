@@ -1,21 +1,42 @@
-# Notification message schema
+# Ingestion API (`POST /v1/notifications`)
 
-Every producing project sends the same shape to `POST /v1/notifications`. Phase 1+
-will own the canonical schema as an `Notify.Shared` C# record; this doc is for
-non-.NET producers (cron scripts, shell hooks, Python, JS, etc.).
+The pipeline accepts **CloudEvents 1.0** (CNCF spec) over HTTP, exclusively. The
+legacy `application/json` body the IngestionApi used to accept was retired in
+favor of an interoperable envelope so any producer that already speaks CE —
+Azure Event Grid, Knative, observability tools, Kafka bridges, custom emitters —
+can publish without a Notify-specific client.
 
-## Headers
+Three modes are accepted (HTTP binding §3 in the CE spec):
 
-| Header | Required | Notes |
+| Mode | `Content-Type` | Body |
 |---|---|---|
-| `x-api-key` | yes | per-project key, prefix `npk_` |
-| `content-type` | yes | `application/json` |
+| Structured single | `application/cloudevents+json` | one event JSON envelope |
+| Batch | `application/cloudevents-batch+json` | JSON array of envelopes |
+| Binary single | `application/json` (or omitted) | event `data` only; envelope attrs in `ce-*` headers |
 
-## Body
+Anything else returns `415 Unsupported Media Type`.
+
+## Auth
+
+`x-api-key: npk_…` — per-project key (Argon2id-hashed server-side). All events in
+a batch must share the same `source` attribute, which the server uses to look up
+the project record before verifying the key.
+
+## Required CloudEvent attributes
+
+| Attribute | Required | Use |
+|---|---|---|
+| `specversion` | yes | must be `"1.0"` |
+| `type` | yes | must be `"notify.created.v1"` — gates the `data` schema |
+| `source` | yes | producer's project id (e.g. `home-pipeline`) |
+| `id` | yes | producer-side correlation id; server mints its own UUIDv7 for internal storage |
+| `time` | optional | RFC3339; used as the notification timestamp; server fills if absent |
+| `datacontenttype` | optional | must be `application/json` or omitted |
+
+## `data` payload (notification body)
 
 ```jsonc
 {
-  "source": "home-pipeline",          // required, project id (must match the API key's project)
   "type": "alert",                    // info | warning | alert | <custom>
   "title": "Backup failed",           // required, ≤120 chars
   "body": "rsync exited 12 on host pi-01",  // required, ≤2000 chars
@@ -23,22 +44,58 @@ non-.NET producers (cron scripts, shell hooks, Python, JS, etc.).
   "tags": ["pi-01", "backup"],        // optional, ≤10, each ≤64 chars, [A-Za-z0-9._-]; "global" reserved
   "deeplink": "https://...",          // optional, scheme ∈ {https, notify}, ≤2048 chars
   "metadata": { "host": "pi-01" },    // optional, free-form, ≤4 KB serialized
-  "deduplicationKey": "backup-2026-04-28",  // optional; same key within TTL = idempotent
-  "timestamp": "2026-04-28T14:00:00Z" // optional, server fills if missing
+  "deduplicationKey": "backup-2026-04-28"   // optional; same key within TTL = idempotent
 }
 ```
 
+If `data` carries its own `source` / `id` / `timestamp` fields they're silently
+overridden — the CloudEvent attributes are canonical on the wire and the server
+locks `source` to the authenticated project regardless.
+
 ## Response
 
-`202 Accepted` with `{ "id": "<uuid-v7>" }`. The server discards the request body's
-`source` and overrides it with the project locked to the API key.
+- Single (structured or binary): `202 Accepted` with `{ "id": "<uuid-v7>" }`.
+- Batch: `202 Accepted` with `{ "ids": ["<uuid-v7>", ...] }`.
+- Batches are atomic: any per-event validation failure rejects the whole batch
+  with `400` (`{ "errors": [{ "field": "events[i].title", "message": "…" }] }`)
+  and nothing is published.
+- Max batch size: 100 events. Max request body: 128 KB.
 
-## curl recipe
+## curl recipes
+
+Structured single:
 
 ```sh
-curl -sf -H "x-api-key: $NOTIFY_KEY" -H "content-type: application/json" \
+curl -sf -H "x-api-key: $NOTIFY_KEY" -H "Content-Type: application/cloudevents+json" \
+  "$NOTIFY_URL/v1/notifications" -d '{
+    "specversion":"1.0","type":"notify.created.v1",
+    "source":"my-cron","id":"'"$(uuidgen)"'",
+    "time":"'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'",
+    "data":{"title":"Done","body":"weekly cleanup ok","priority":"low"}
+  }'
+```
+
+Batch:
+
+```sh
+curl -sf -H "x-api-key: $NOTIFY_KEY" -H "Content-Type: application/cloudevents-batch+json" \
+  "$NOTIFY_URL/v1/notifications" -d '[
+    {"specversion":"1.0","type":"notify.created.v1","source":"my-cron","id":"a",
+     "data":{"title":"a","body":"a"}},
+    {"specversion":"1.0","type":"notify.created.v1","source":"my-cron","id":"b",
+     "data":{"title":"b","body":"b"}}
+  ]'
+```
+
+Binary single (envelope attrs in headers, body is `data` only):
+
+```sh
+curl -sf -H "x-api-key: $NOTIFY_KEY" \
+  -H "ce-specversion: 1.0" -H "ce-type: notify.created.v1" \
+  -H "ce-source: my-cron" -H "ce-id: $(uuidgen)" \
+  -H "Content-Type: application/json" \
   "$NOTIFY_URL/v1/notifications" \
-  -d '{"source":"my-cron","title":"Done","body":"weekly cleanup ok","priority":"low"}'
+  -d '{"title":"Done","body":"weekly cleanup ok","priority":"low"}'
 ```
 
 ---

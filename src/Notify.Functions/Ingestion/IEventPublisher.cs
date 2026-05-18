@@ -10,6 +10,7 @@ namespace Notify.Functions.Ingestion;
 public interface IEventPublisher
 {
     Task PublishAsync(CloudEventEnvelope envelope, CancellationToken ct = default);
+    Task PublishBatchAsync(IReadOnlyList<CloudEventEnvelope> envelopes, CancellationToken ct = default);
 }
 
 public sealed class EventGridEventPublisher : IEventPublisher
@@ -19,6 +20,19 @@ public sealed class EventGridEventPublisher : IEventPublisher
     public EventGridEventPublisher(EventGridPublisherClient client) => _client = client;
 
     public Task PublishAsync(CloudEventEnvelope envelope, CancellationToken ct = default)
+        => _client.SendEventAsync(ToCloudEvent(envelope), ct);
+
+    public Task PublishBatchAsync(IReadOnlyList<CloudEventEnvelope> envelopes, CancellationToken ct = default)
+    {
+        // SendEventsAsync is one HTTP request to EventGrid; EG accepts the
+        // batch atomically (all events accepted or 4xx with none accepted).
+        // No partial-state to reconcile in the handler.
+        var ces = new CloudEvent[envelopes.Count];
+        for (var i = 0; i < envelopes.Count; i++) ces[i] = ToCloudEvent(envelopes[i]);
+        return _client.SendEventsAsync(ces, ct);
+    }
+
+    private static CloudEvent ToCloudEvent(CloudEventEnvelope envelope)
     {
         // The 3-arg CloudEvent(source, type, object) ctor binds to the
         // (source, type, object, Type?) overload and *throws* at runtime when it
@@ -26,7 +40,7 @@ public sealed class EventGridEventPublisher : IEventPublisher
         // BinaryData. Use the constructor that takes a BinaryData instance."
         // Use the explicit 4-arg BinaryData overload — dataContentType is
         // required so the broker tags the event correctly.
-        var ce = new CloudEvent(
+        return new CloudEvent(
             envelope.Source,
             envelope.Type,
             BinaryData.FromObjectAsJson(envelope.Data, NotifyJson.Options),
@@ -36,6 +50,5 @@ public sealed class EventGridEventPublisher : IEventPublisher
             Id = envelope.Id,
             Time = envelope.Time,
         };
-        return _client.SendEventAsync(ce, ct);
     }
 }

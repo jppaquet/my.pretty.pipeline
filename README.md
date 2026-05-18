@@ -20,15 +20,18 @@ Two independent boundaries:
 
 ## Producing
 
-Anything that speaks JSON over HTTPS:
+Anything that speaks **CloudEvents 1.0** over HTTPS (structured, binary, or batch — see [SCHEMA.md](docs/SCHEMA.md)):
 
 ```sh
-curl -sf -H "x-api-key: $NOTIFY_KEY" -H "content-type: application/json" \
-  https://notify.example.com/v1/notifications \
-  -d '{"source":"home-pipeline","title":"Backup OK","body":"480 GB in 41 min"}'
+curl -sf -H "x-api-key: $NOTIFY_KEY" -H "Content-Type: application/cloudevents+json" \
+  https://notify.example.com/v1/notifications -d '{
+    "specversion":"1.0","type":"notify.created.v1",
+    "source":"home-pipeline","id":"'"$(uuidgen)"'",
+    "data":{"title":"Backup OK","body":"480 GB in 41 min"}
+  }'
 ```
 
-No SDK, by design.
+No SDK, by design — any CloudEvents emitter (Event Grid, Knative, custom) interoperates out of the box.
 
 ## Stack
 

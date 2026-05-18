@@ -8,7 +8,9 @@ namespace Notify.Functions.Ingestion;
 public abstract record IngestResult
 {
     public sealed record Accepted(string Id) : IngestResult;
+    public sealed record AcceptedBatch(IReadOnlyList<string> Ids) : IngestResult;
     public sealed record BadRequest(IReadOnlyList<ValidationFailure> Failures) : IngestResult;
     public sealed record Unauthorized : IngestResult;
     public sealed record PayloadTooLarge(int LimitBytes) : IngestResult;
+    public sealed record UnsupportedMediaType(string Message) : IngestResult;
 }

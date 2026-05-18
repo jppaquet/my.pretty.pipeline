@@ -43,18 +43,17 @@ public class PipelineTests
             : new Uri($"https://{hostname}");
 
         var dedup = $"e2e-{Guid.NewGuid():N}";
-        var body = new
+        var envelope = StructuredCloudEvent(project!, new
         {
-            source = project,
             title = "e2e",
             body = "pipeline check",
             deduplicationKey = dedup,
-        };
+        });
 
         using var http = new HttpClient { BaseAddress = baseUri };
         http.DefaultRequestHeaders.Add("x-api-key", apiKey);
 
-        var resp = await http.PostAsJsonAsync("/v1/notifications", body, NotifyJson.Options);
+        var resp = await http.PostAsync("/v1/notifications", envelope);
         Assert.Equal(HttpStatusCode.Accepted, resp.StatusCode);
 
         using var cosmosClient = new CosmosClient(cosmos, new DefaultAzureCredential(), new CosmosClientOptions
@@ -107,13 +106,13 @@ public class PipelineTests
         using var http = new HttpClient { BaseAddress = baseUri };
         http.DefaultRequestHeaders.Add("x-api-key", apiKey);
 
-        var post = await http.PostAsJsonAsync("/v1/notifications", new
+        var envelope = StructuredCloudEvent(project!, new
         {
-            source = project,
             title = "e2e-inbox",
             body = "inbox check",
             deduplicationKey = dedup,
-        }, NotifyJson.Options);
+        });
+        var post = await http.PostAsync("/v1/notifications", envelope);
         Assert.Equal(HttpStatusCode.Accepted, post.StatusCode);
 
         var inboxUrl = $"/v1/inbox?source={Uri.EscapeDataString(project!)}&limit=50&code={Uri.EscapeDataString(functionKey!)}";
@@ -134,4 +133,20 @@ public class PipelineTests
     }
 
     private sealed record InboxPageResponse(IReadOnlyList<NotificationDocument> Items, string? ContinuationToken);
+
+    private static HttpContent StructuredCloudEvent(string source, object data)
+    {
+        var envelope = new
+        {
+            specversion = "1.0",
+            type = "notify.created.v1",
+            source,
+            id = Guid.NewGuid().ToString("D"),
+            time = DateTimeOffset.UtcNow,
+            datacontenttype = "application/json",
+            data,
+        };
+        var json = System.Text.Json.JsonSerializer.Serialize(envelope, NotifyJson.Options);
+        return new StringContent(json, System.Text.Encoding.UTF8, "application/cloudevents+json");
+    }
 }

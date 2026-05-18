@@ -431,13 +431,20 @@ the mint-a-key recipe.
 NOTIFY_URL="https://$(gh variable get NOTIFY_HOSTNAME)"
 NOTIFY_KEY="<the npk_… from step 9>"
 
-curl -sf -H "x-api-key: $NOTIFY_KEY" -H "content-type: application/json" \
-  "$NOTIFY_URL/v1/notifications" \
-  -d '{"source":"my-cron","title":"Hello","body":"first notification"}'
+curl -sf -H "x-api-key: $NOTIFY_KEY" -H "Content-Type: application/cloudevents+json" \
+  "$NOTIFY_URL/v1/notifications" -d '{
+    "specversion":"1.0","type":"notify.created.v1",
+    "source":"my-cron","id":"'"$(uuidgen)"'",
+    "data":{"title":"Hello","body":"first notification"}
+  }'
 ```
 
 Within a few seconds the notification lands in the iOS app (push if the
 APNs key was uploaded in step 6; inbox-only if not).
+
+The wire format is **CloudEvents 1.0**; structured, binary, and batch modes
+are all accepted. See [SCHEMA.md](SCHEMA.md) for the full attribute table
+and curl recipes for each mode.
 
 ## Where things live
 

@@ -3,12 +3,19 @@ using System.Text.Json.Serialization;
 
 namespace Notify.Shared.CloudEvents;
 
-// Canonical message contract producers send to POST /v1/notifications.
-// Mirrors docs/SCHEMA.md. Server-fills Id, Timestamp, and overrides Source from
-// the authenticated project (the producer's submitted Source is ignored).
+// Notification payload carried inside a CloudEvents 1.0 envelope's `data`.
+// Mirrors docs/SCHEMA.md. Source is server-locked from the authenticated
+// project: the CloudEvents `source` attribute is the canonical project id on
+// the wire, and the handler sets this field from `project.ProjectId` post-auth
+// before validation. Any value the producer puts here is overwritten.
 public sealed record NotifyCreatedV1
 {
-    [JsonPropertyName("source")] public required string Source { get; init; }
+    // Source is the CloudEvents `source` attribute on the wire, not part of
+    // `data`. The handler sets this field from project.ProjectId post-auth so
+    // every downstream consumer reads a non-empty string. Default-empty
+    // (rather than `required`) so deserialization succeeds when producers
+    // omit it from data, which they should — the CE attribute is canonical.
+    [JsonPropertyName("source")] public string Source { get; init; } = string.Empty;
     [JsonPropertyName("title")]  public required string Title { get; init; }
     [JsonPropertyName("body")]   public required string Body { get; init; }
 
