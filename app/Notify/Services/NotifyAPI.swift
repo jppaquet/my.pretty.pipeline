@@ -186,6 +186,71 @@ final class MockNotifyAPI: NotifyAPI {
         + "Code block:\n```swift\nlet container = AppContainer.makeDefault()\n```\n\n"
         + "> ⚠️ **Breaking:** Requires iOS 17+"
 
+    // Kitchen-sink markdown body. Exercises every formatting axis the
+    // detail view's `.full` markdown renderer is expected to handle, plus
+    // emoji and long paragraphs so layout/scroll behavior is visible.
+    // Paired with `priority: .high` + `type: "alert"` so the row carries
+    // the red row tint + red `exclamationmark.octagon.fill` icon for the
+    // color axis the renderer itself doesn't support.
+    private static let previewKitchenSinkBody = """
+    🚨 **Critical incident — please read carefully** 🚨
+
+    Production cluster `api-west` lost quorum at **02:47 UTC** after a \
+    rolling restart picked up a *corrupted* configuration. Auto-rollback \
+    fired and the cluster is back to the last known-good revision.
+
+    ## What we know
+
+    - **Blast radius:** ~12% of inbound traffic between 02:47–02:51 UTC
+    - **Root cause:** `etcd` leader election timeout misconfigured (3 s → 30 s)
+    - **Detection:** Synthetic probe pager fired within 18 s 🔥
+    - **Mitigation:** Auto-rollback completed at 02:51 UTC ✅
+
+    > ⚠️ **Heads-up:** The same misconfiguration may exist in `api-east` \
+    > and `api-eu` — a sweep is queued for the next maintenance window. \
+    > Block any deploys that touch `etcd-config.yaml` until then.
+
+    ### Action items
+
+    1. Audit `etcd-config.yaml` across all clusters — see [runbook](https://example.com/runbook/etcd).
+    2. Add a CI check that rejects values outside the safe band (1–10 s).
+    3. Backfill a postmortem ticket — owner: **@you**, due **Friday**.
+    4. ~~Rotate the on-call schedule~~ already handled by the bot.
+
+    ### Things that *worked* well 🎉
+
+    - Synthetic probe pager fired in `< 20 s` (target: ≤ 60 s)
+    - Auto-rollback executed cleanly with `0` manual interventions
+    - Status page updated in `< 90 s` — Customer Success had a heads-up before \
+      the first ticket came in
+
+    ```yaml
+    # Safe etcd config — pin this in CI
+    election-timeout: 5s    # was 30s
+    heartbeat-interval: 500ms
+    ```
+
+    ---
+
+    **Severity matrix** (legend: 🔴 critical · 🟠 high · 🟡 medium · 🟢 low):
+
+    | Service     | Before | After |
+    | ----------- | ------ | ----- |
+    | api-west    | 🔴     | 🟢    |
+    | api-east    | 🟠     | 🟠    |
+    | api-eu      | 🟠     | 🟠    |
+
+    *Reply with* `ack` *to acknowledge, or* `pager` *to escalate to the on-call lead.*
+
+    Long-tail context: this is the third incident this quarter traced to a \
+    config-drift between clusters. We've been carrying a tech-debt item to \
+    canonicalize cluster config under a single source of truth since \
+    **2026-Q1**; the postmortem from this incident will be the forcing \
+    function to actually schedule that work into a sprint. The team lead \
+    will pair with infra-platform to draft an RFC by end of next week — \
+    expect a follow-up notification when the doc is ready for review. 📄
+    """
+
     private static func previewItems() -> [InboxNotification] {
         let now = Date()
         let cal = Calendar.current
@@ -233,7 +298,29 @@ final class MockNotifyAPI: NotifyAPI {
             .mock(id: "p10", source: "deploy", title: "Deployment changelog v2.5.0",
                   body: previewChangelogBody, priority: .high, tags: ["changelog", "deploy"],
                   timestamp: cal.date(byAdding: .minute, value: -15, to: now) ?? now),
+            previewKitchenSinkMock(timestamp: cal.date(byAdding: .minute, value: -2, to: now) ?? now),
         ]
+    }
+
+    // Markdown kitchen sink — everything the detail view's `.full`
+    // renderer should handle, plus heavy emoji and a long tail of
+    // body text for scroll testing. Pinned `priority: .high` +
+    // `type: "alert"` so the row exercises the priority background +
+    // type icon styling alongside the markdown body.
+    // Hoisted out of `previewItems()` to keep that function's body
+    // under SwiftLint's 50-line ceiling.
+    private static func previewKitchenSinkMock(timestamp: Date) -> InboxNotification {
+        .mock(
+            id: "p11",
+            source: "incident-bot",
+            title: "🚨 Incident: api-west quorum loss",
+            body: previewKitchenSinkBody,
+            type: "alert",
+            priority: .high,
+            tags: ["incident", "critical", "etcd"],
+            deeplink: URL(string: "https://example.com/incident/2026-05-18-api-west"),
+            timestamp: timestamp
+        )
     }
 
     // Fixture used by AppContainer when the app is launched with
