@@ -68,6 +68,32 @@ final class InboxViewModel {
         }
     }
 
+    // Optimistically flip `isRead` on the row, then POST /v1/inbox/{id}/read.
+    // No-op if already read. API failure is swallowed: marking read is
+    // idempotent and any future open will retry — surfacing a banner for
+    // this would be noisier than the value of knowing it failed.
+    func markRead(id: InboxNotification.ID) async {
+        guard case .loaded(var items, let token) = state else { return }
+        guard let idx = items.firstIndex(where: { $0.id == id }) else { return }
+        guard items[idx].isRead != true else { return }
+        let source = items[idx].source
+        items[idx].isRead = true
+        state = .loaded(items: items, continuationToken: token)
+        try? await api.markInboxRead(id: id, source: source)
+    }
+
+    // Optimistically drop the row from the list, then DELETE /v1/inbox/{id}.
+    // On API failure we leave the row out — server filter will catch up on
+    // the next refresh either way (soft delete is server-side).
+    func delete(id: InboxNotification.ID) async {
+        guard case .loaded(var items, let token) = state else { return }
+        guard let idx = items.firstIndex(where: { $0.id == id }) else { return }
+        let source = items[idx].source
+        items.remove(at: idx)
+        state = .loaded(items: items, continuationToken: token)
+        try? await api.deleteInboxItem(id: id, source: source)
+    }
+
     private static func message(for error: Error) -> String {
         if let api = error as? NotifyAPIError {
             switch api {

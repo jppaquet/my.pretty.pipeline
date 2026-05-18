@@ -35,6 +35,14 @@ public sealed record NotificationDocument
     [JsonPropertyName("timestamp")]        public required DateTimeOffset Timestamp { get; init; }
     [JsonPropertyName("envelopeId")]       public required string EnvelopeId { get; init; }
 
+    // Per-recipient mutation state set after Archive writes the row. Default
+    // false on create; the Inbox mutation endpoints (POST /v1/inbox/{id}/read,
+    // DELETE /v1/inbox/{id}) flip these per (id, userId). Inbox queries filter
+    // IsHidden rows out so a swipe-to-delete removes the row from the iOS list
+    // without losing the audit document (the 90-day TTL still applies).
+    [JsonPropertyName("isRead")]           public bool IsRead { get; init; }
+    [JsonPropertyName("isHidden")]         public bool IsHidden { get; init; }
+
     public static NotificationDocument From(CloudEventEnvelope envelope, string baseId, string userId) => new()
     {
         Id = $"{baseId}:{userId}",

@@ -15,6 +15,15 @@ struct InboxNotification: Identifiable, Codable, Hashable {
     let deduplicationKey: String?
     let timestamp: Date
     let envelopeId: String
+
+    // Per-recipient mutation state. Optional so docs written before these
+    // fields existed still decode (nil treated as false / unread / not
+    // hidden). Optionals are implicitly initialized to nil so existing
+    // call sites of the memberwise initializer keep working without passing
+    // them. Mutated locally by the view-model after POST /v1/inbox/{id}/read
+    // or DELETE /v1/inbox/{id}.
+    var isRead: Bool?
+    var isHidden: Bool?
 }
 
 enum Priority: String, Codable, Hashable {
@@ -33,13 +42,16 @@ extension InboxNotification {
         deeplink: URL? = nil,
         deduplicationKey: String? = nil,
         timestamp: Date,
-        envelopeId: String? = nil
+        envelopeId: String? = nil,
+        isRead: Bool? = nil,
+        isHidden: Bool? = nil
     ) -> InboxNotification {
         InboxNotification(
             id: id, source: source, title: title, body: body,
             type: type, priority: priority, tags: tags,
             deeplink: deeplink, deduplicationKey: deduplicationKey,
-            timestamp: timestamp, envelopeId: envelopeId ?? "env-\(id)"
+            timestamp: timestamp, envelopeId: envelopeId ?? "env-\(id)",
+            isRead: isRead, isHidden: isHidden
         )
     }
 }

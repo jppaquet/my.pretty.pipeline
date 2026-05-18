@@ -1,8 +1,19 @@
+// swiftlint:disable file_length
+//
+// This file deliberately bundles three concerns — the NotifyAPI protocol, the
+// real NotifyAPIClient, and the MockNotifyAPI fixture used by tests + the
+// LOCAL_UI_PREVIEW build — to keep the .xcodeproj as the source of truth
+// for the file list (no xcodegen / project.yml in this project). Splitting
+// MockNotifyAPI to its own file would require an Xcode-UI edit and a
+// .pbxproj change; deferred to a future cleanup pass.
+
 import Foundation
 
 protocol NotifyAPI {
     func registerDevice(_ registration: DeviceRegistration) async throws -> DeviceRegistrationResponse
     func inbox(source: String?, limit: Int, continuationToken: String?) async throws -> InboxPage
+    func markInboxRead(id: String, source: String) async throws
+    func deleteInboxItem(id: String, source: String) async throws
 }
 
 enum NotifyAPIError: Error, Equatable {
@@ -56,6 +67,30 @@ final class NotifyAPIClient: NotifyAPI {
         return try await send(request)
     }
 
+    func markInboxRead(id: String, source: String) async throws {
+        try await mutateInboxItem(id: id, source: source, method: "POST", suffix: "/read")
+    }
+
+    func deleteInboxItem(id: String, source: String) async throws {
+        try await mutateInboxItem(id: id, source: source, method: "DELETE", suffix: nil)
+    }
+
+    // Shared shape for `v1/inbox/{id}[/suffix]?source=…`. `id` is a full
+    // Cosmos doc id (`{baseId}:{userId}`); `:` is allowed in path segments
+    // per RFC 3986 §3.3 so the segment is passed through unencoded.
+    private func mutateInboxItem(id: String, source: String, method: String, suffix: String?) async throws {
+        let path = "v1/inbox/\(id)\(suffix ?? "")"
+        var components = URLComponents(url: baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false)
+        components?.queryItems = [URLQueryItem(name: "source", value: source)]
+        guard let url = components?.url else {
+            throw NotifyAPIError.transport("Could not build inbox-item URL")
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        applyAuth(to: &request)
+        try await sendNoBody(request)
+    }
+
     private func applyAuth(to request: inout URLRequest) {
         if let token = bearer(), !token.isEmpty {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -63,6 +98,19 @@ final class NotifyAPIClient: NotifyAPI {
     }
 
     private func send<T: Decodable>(_ request: URLRequest) async throws -> T {
+        let data = try await performAndCheck(request)
+        do {
+            return try Self.decoder.decode(T.self, from: data)
+        } catch {
+            throw NotifyAPIError.decoding(String(describing: error))
+        }
+    }
+
+    private func sendNoBody(_ request: URLRequest) async throws {
+        _ = try await performAndCheck(request)
+    }
+
+    private func performAndCheck(_ request: URLRequest) async throws -> Data {
         let data: Data
         let response: URLResponse
         do {
@@ -70,19 +118,13 @@ final class NotifyAPIClient: NotifyAPI {
         } catch {
             throw NotifyAPIError.transport(error.localizedDescription)
         }
-
         guard let http = response as? HTTPURLResponse else {
             throw NotifyAPIError.transport("Non-HTTP response")
         }
         guard (200..<300).contains(http.statusCode) else {
             throw NotifyAPIError.http(status: http.statusCode, body: String(data: data, encoding: .utf8))
         }
-
-        do {
-            return try Self.decoder.decode(T.self, from: data)
-        } catch {
-            throw NotifyAPIError.decoding(String(describing: error))
-        }
+        return data
     }
 
     static let decoder: JSONDecoder = {
@@ -158,6 +200,20 @@ final class MockNotifyAPI: NotifyAPI {
         if let inboxError { throw inboxError }
         defer { pageCursor = min(pageCursor + 1, pages.count) }
         return pageCursor < pages.count ? pages[pageCursor] : InboxPage(items: [], continuationToken: nil)
+    }
+
+    private(set) var markReadCalls: [InboxItemCall] = []
+    private(set) var deleteCalls: [InboxItemCall] = []
+    var mutationError: Error?
+
+    func markInboxRead(id: String, source: String) async throws {
+        markReadCalls.append(InboxItemCall(id: id, source: source))
+        if let mutationError { throw mutationError }
+    }
+
+    func deleteInboxItem(id: String, source: String) async throws {
+        deleteCalls.append(InboxItemCall(id: id, source: source))
+        if let mutationError { throw mutationError }
     }
 
     // Fixture used by AppContainer for LOCAL_UI_PREVIEW builds. Richer than
@@ -364,4 +420,9 @@ struct InboxCall: Equatable {
     let source: String?
     let limit: Int
     let token: String?
+}
+
+struct InboxItemCall: Equatable {
+    let id: String
+    let source: String
 }
