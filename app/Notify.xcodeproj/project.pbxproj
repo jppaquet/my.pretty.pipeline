@@ -17,6 +17,7 @@
 		7CAB3BB4C49B2DB7C83CAD75 /* PushPayloadParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 668E4C3D4CD3F8014C92AF48 /* PushPayloadParserTests.swift */; };
 		7F41779FF5C408036F46EF9D /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 179CEA1636C24F60BB6DD7BA /* KeychainStore.swift */; };
 		8017EBF41BA0D0303A2DABD5 /* NotifyAPICodableTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F321D843CB72A4C3EC33F22 /* NotifyAPICodableTests.swift */; };
+		7E1A6F9D4C82B05E1F38A24C /* MarkdownView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3D9C2E15F0A7842D610C9B4 /* MarkdownView.swift */; };
 		8CAC0C8B804AA983E4C9636A /* NotificationDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60831F704B520D6B292272D6 /* NotificationDetailView.swift */; };
 		9D086923D5FF98B6D6777328 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A77EB84E6138D18CF259FE92 /* RootView.swift */; };
 		D72B9FD6F17A00E4EAC5EDA6 /* NotifyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD5DCFE552797D390A02209F /* NotifyApp.swift */; };
@@ -53,6 +54,7 @@
 		2F321D843CB72A4C3EC33F22 /* NotifyAPICodableTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotifyAPICodableTests.swift; sourceTree = "<group>"; };
 		3E6BBAB6F54CF9870B7428F3 /* NotifyTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = NotifyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		60831F704B520D6B292272D6 /* NotificationDetailView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotificationDetailView.swift; sourceTree = "<group>"; };
+		B3D9C2E15F0A7842D610C9B4 /* MarkdownView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MarkdownView.swift; sourceTree = "<group>"; };
 		668E4C3D4CD3F8014C92AF48 /* PushPayloadParserTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PushPayloadParserTests.swift; sourceTree = "<group>"; };
 		699977EE24AE54ECC7813AA2 /* InboxViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = InboxViewModel.swift; sourceTree = "<group>"; };
 		6DB5753DB350C5079A045977 /* InboxNotification.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = InboxNotification.swift; sourceTree = "<group>"; };
@@ -112,6 +114,7 @@
 			children = (
 				699977EE24AE54ECC7813AA2 /* InboxViewModel.swift */,
 				73732EDF45A7432F3728B493 /* InboxView.swift */,
+				B3D9C2E15F0A7842D610C9B4 /* MarkdownView.swift */,
 				60831F704B520D6B292272D6 /* NotificationDetailView.swift */,
 			);
 			path = Inbox;
@@ -308,6 +311,7 @@
 				E8DA9F3501AE40D952F5D056 /* PushRegistration.swift in Sources */,
 				0BC72CD07DB41C379B2A2119 /* InboxViewModel.swift in Sources */,
 				66126393E25D006C3A604F36 /* InboxView.swift in Sources */,
+				7E1A6F9D4C82B05E1F38A24C /* MarkdownView.swift in Sources */,
 				8CAC0C8B804AA983E4C9636A /* NotificationDetailView.swift in Sources */,
 				FC3CF4BBA2E756A31287713F /* AppContainer.swift in Sources */,
 				AE6B2C3F19A874CB05D8E201 /* AuthViewModel.swift in Sources */,
