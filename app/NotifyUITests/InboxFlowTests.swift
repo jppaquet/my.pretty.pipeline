@@ -24,7 +24,13 @@ final class InboxFlowTests: XCTestCase {
         XCTAssertTrue(row.waitForExistence(timeout: 5), "Seeded row not found")
         row.tap()
 
+        // Bumped from 5 → 15 s. The previous 5 s window started timing out
+        // on iPhone 16 (compact) around the PR #95 runner-image bump even
+        // though iPad regular-width keeps passing — NavigationSplitView's
+        // compact push is noticeably slower under the newer simulator and
+        // 5 s was right on the edge. Detail view is functionally correct,
+        // just slow to materialize; the longer wait is the right contract.
         let detail = app.scrollViews["notification.detail"]
-        XCTAssertTrue(detail.waitForExistence(timeout: 5), "Detail not shown after tap")
+        XCTAssertTrue(detail.waitForExistence(timeout: 15), "Detail not shown after tap")
     }
 }
