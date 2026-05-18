@@ -28,7 +28,14 @@ public sealed class CosmosInboxQuery : IInboxQuery
         // Cross-partition by default — the inbox spans every `source` partition
         // the user is subscribed to. When the caller supplies a source filter,
         // we also constrain the partition for a cheaper point-partition query.
-        var query = new QueryDefinition("SELECT * FROM c WHERE c.userId = @userId ORDER BY c.timestamp DESC")
+        //
+        // `isHidden` filter: rows written before the field existed have no
+        // `c.isHidden` property, so coalesce missing → false to keep showing
+        // pre-migration rows in the inbox.
+        var query = new QueryDefinition(
+                "SELECT * FROM c WHERE c.userId = @userId "
+                + "AND (NOT IS_DEFINED(c.isHidden) OR c.isHidden = false) "
+                + "ORDER BY c.timestamp DESC")
             .WithParameter("@userId", userId);
         var options = new QueryRequestOptions { MaxItemCount = limit };
         if (!string.IsNullOrEmpty(source))

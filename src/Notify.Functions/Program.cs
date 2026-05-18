@@ -99,7 +99,14 @@ var host = new HostBuilder()
             var cosmos = sp.GetRequiredService<CosmosClient>();
             return new CosmosInboxQuery(cosmos.GetContainer(opts.CosmosDatabase, opts.CosmosNotificationsContainer));
         });
+        services.AddSingleton<IInboxMutator>(sp =>
+        {
+            var opts = sp.GetRequiredService<IOptions<InboxOptions>>().Value;
+            var cosmos = sp.GetRequiredService<CosmosClient>();
+            return new CosmosInboxMutator(cosmos.GetContainer(opts.CosmosDatabase, opts.CosmosNotificationsContainer));
+        });
         services.AddSingleton<InboxHandler>();
+        services.AddSingleton<InboxMutationHandler>();
 
         // ── Notification Hubs (Devices + Push share the client) ─────────
         services.AddSingleton(sp =>
