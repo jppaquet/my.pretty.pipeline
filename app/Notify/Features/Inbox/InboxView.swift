@@ -26,6 +26,7 @@ struct InboxView: View {
                                 // descendant — XCUITest needs it on the cell.
                                 .accessibilityElement(children: .combine)
                                 .accessibilityIdentifier("inbox.row.\(item.id)")
+                                .listRowBackground(item.priority.rowBackground)
                         }
                     } else {
                         let sections = groupedSections(items: items, by: viewModel.grouping)
@@ -37,6 +38,7 @@ struct InboxView: View {
                                             .tag(item.id)
                                             .accessibilityElement(children: .combine)
                                             .accessibilityIdentifier("inbox.row.\(item.id)")
+                                            .listRowBackground(item.priority.rowBackground)
                                     }
                                 }
                             } header: {
@@ -120,7 +122,11 @@ private struct InboxRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack {
+            HStack(spacing: 6) {
+                Image(systemName: TypeStyling.symbol(for: notification.type))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(TypeStyling.tint(for: notification.type))
+                    .accessibilityHidden(true)
                 Text(notification.source)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -137,6 +143,61 @@ private struct InboxRow: View {
                 .lineLimit(2)
         }
         .padding(.vertical, 2)
+    }
+}
+
+// Type styling. Severity ladder is info → warning → alert; anything else is
+// treated as a custom category (neutral tag icon). Symbol + tint are
+// foreground-only — background tint is driven by Priority on the row.
+private enum TypeStyling {
+    static func symbol(for type: String) -> String {
+        switch type {
+        case "info":    return "info.circle"
+        case "warning": return "exclamationmark.triangle.fill"
+        case "alert":   return "exclamationmark.octagon.fill"
+        default:        return "tag"
+        }
+    }
+
+    static func tint(for type: String) -> Color {
+        switch type {
+        case "info":    return .blue
+        case "warning": return .orange
+        case "alert":   return .red
+        default:        return .secondary
+        }
+    }
+}
+
+// Priority → list-row background. Subtle enough to read at a glance
+// without overwhelming the row content; values picked to hold up in both
+// light and dark mode. `nil` defers to the system default background.
+extension Priority {
+    var rowBackground: Color? {
+        switch self {
+        case .high:   return Color.red.opacity(0.12)
+        case .normal: return nil
+        case .low:    return Color.gray.opacity(0.06)
+        }
+    }
+
+    // Sort order from most-urgent to least-urgent. Used by the `By Priority`
+    // grouping so high sections land at the top regardless of how Dictionary
+    // happens to iterate the keys.
+    var sortOrder: Int {
+        switch self {
+        case .high:   return 0
+        case .normal: return 1
+        case .low:    return 2
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .high:   return "High"
+        case .normal: return "Normal"
+        case .low:    return "Low"
+        }
     }
 }
 
@@ -192,6 +253,26 @@ private func groupedSections(items: [InboxNotification], by grouping: InboxViewM
         let grouped = Dictionary(grouping: items) { $0.source }
         return grouped.keys.sorted().compactMap { source in
             grouped[source].map { SectionData(header: source, items: $0) }
+        }
+    case .priority:
+        let grouped = Dictionary(grouping: items) { $0.priority }
+        return grouped.keys.sorted { $0.sortOrder < $1.sortOrder }.compactMap { priority in
+            grouped[priority].map { SectionData(header: priority.displayName, items: $0) }
+        }
+    case .type:
+        // Severity-ordered ladder for known types, then any custom types
+        // sorted alphabetically below. Backend allows arbitrary `type`
+        // strings (schema: "info | warning | alert | <custom>"), so we
+        // can't enumerate — fall back to lex order for the long tail.
+        let known: [String: Int] = ["alert": 0, "warning": 1, "info": 2]
+        let grouped = Dictionary(grouping: items) { $0.type }
+        return grouped.keys.sorted { lhs, rhs in
+            let lhsRank = known[lhs] ?? Int.max
+            let rhsRank = known[rhs] ?? Int.max
+            if lhsRank != rhsRank { return lhsRank < rhsRank }
+            return lhs < rhs
+        }.compactMap { type in
+            grouped[type].map { SectionData(header: type.capitalized, items: $0) }
         }
     }
 }
