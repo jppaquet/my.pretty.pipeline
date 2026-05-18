@@ -3,16 +3,6 @@ import SwiftUI
 struct NotificationDetailView: View {
     let notification: InboxNotification
 
-    private var attributedBody: AttributedString {
-        (try? AttributedString(
-            markdown: notification.body,
-            options: AttributedString.MarkdownParsingOptions(
-                interpretedSyntax: .full,
-                failurePolicy: .returnPartiallyParsedIfPossible
-            )
-        )) ?? AttributedString(notification.body)
-    }
-
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -27,7 +17,15 @@ struct NotificationDetailView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-                Text(attributedBody)
+                // MarkdownView splits the body on paragraph breaks and
+                // renders each block (heading / list / blockquote /
+                // code fence / paragraph / hr) as the right SwiftUI
+                // view. Foundation's `Text(AttributedString)` with
+                // `.full` markdown collapses paragraph structure into
+                // the `presentationIntent` attribute, which Text
+                // ignores — every `\n\n` disappeared visually. The
+                // block-level renderer is what restores layout.
+                MarkdownView(markdown: notification.body)
                     .font(.body)
 
                 if let deeplink = notification.deeplink {
