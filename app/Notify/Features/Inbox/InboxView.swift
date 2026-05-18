@@ -4,6 +4,12 @@ struct InboxView: View {
     @Bindable var viewModel: InboxViewModel
     @Binding var selection: InboxNotification.ID?
 
+    // Section ids that are currently collapsed. Default-empty = every
+    // section starts expanded. Keying by section.id (the header string)
+    // means stale ids for sections that no longer exist (after a grouping
+    // change) are harmless dormant entries — no need to clear on switch.
+    @State private var collapsedSections: Set<String> = []
+
     var body: some View {
         Group {
             switch viewModel.state {
@@ -24,13 +30,31 @@ struct InboxView: View {
                     } else {
                         let sections = groupedSections(items: items, by: viewModel.grouping)
                         ForEach(sections) { section in
-                            Section(header: Text(section.header)) {
-                                ForEach(section.items) { item in
-                                    InboxRow(notification: item)
-                                        .tag(item.id)
-                                        .accessibilityElement(children: .combine)
-                                        .accessibilityIdentifier("inbox.row.\(item.id)")
+                            Section {
+                                if !collapsedSections.contains(section.id) {
+                                    ForEach(section.items) { item in
+                                        InboxRow(notification: item)
+                                            .tag(item.id)
+                                            .accessibilityElement(children: .combine)
+                                            .accessibilityIdentifier("inbox.row.\(item.id)")
+                                    }
                                 }
+                            } header: {
+                                CollapsibleHeader(
+                                    title: section.header,
+                                    count: section.items.count,
+                                    isCollapsed: collapsedSections.contains(section.id),
+                                    toggle: {
+                                        withAnimation(.easeInOut(duration: 0.18)) {
+                                            if collapsedSections.contains(section.id) {
+                                                collapsedSections.remove(section.id)
+                                            } else {
+                                                collapsedSections.insert(section.id)
+                                            }
+                                        }
+                                    }
+                                )
+                                .accessibilityIdentifier("inbox.section.\(section.id)")
                             }
                         }
                     }
@@ -120,6 +144,36 @@ private struct SectionData: Identifiable {
     let header: String
     let items: [InboxNotification]
     var id: String { header }
+}
+
+// Tappable section header for the grouped-list views. Renders the title +
+// row count on the left and a chevron on the right that rotates when the
+// section is collapsed. Button(.plain) on the whole row gives a sane
+// touch target while keeping the visual identical to a default Section
+// header on iOS.
+private struct CollapsibleHeader: View {
+    let title: String
+    let count: Int
+    let isCollapsed: Bool
+    let toggle: () -> Void
+
+    var body: some View {
+        Button(action: toggle) {
+            HStack {
+                Text(title)
+                Text("\(count)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .rotationEffect(.degrees(isCollapsed ? -90 : 0))
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
 }
 
 private func groupedSections(items: [InboxNotification], by grouping: InboxViewModel.Grouping) -> [SectionData] {
