@@ -17,7 +17,7 @@ disable-model-invocation: true
 
 ## The non-obvious bit
 
-The Ingest handler resolves the project by the **`source` field** in the request body *first*, then verifies the API key hash against that project's salt. Passing the wrong `source` returns **401 even with a valid key** — this is the gotcha that wasted a round-trip the first time this was tried in the conversation that minted this skill. The skill always sets `source: "Watchtower"` to match the project the `NOTIFY_KEY` is bound to.
+The wire format is **CloudEvents 1.0** — the request is a CE envelope, not the raw notification JSON. The Ingest handler resolves the project by the CE **`source` attribute** (on the envelope, not inside `data`), then verifies the API key hash against that project's salt. Passing the wrong `source` returns **401 even with a valid key** — this is the gotcha that wasted a round-trip the first time this was tried in the conversation that minted this skill. The skill always sets `source: "Watchtower"` to match the project the `NOTIFY_KEY` is bound to.
 
 (If you're sending from a different producer, the `source` must match that producer's project id and the key must be that producer's `npk_…`.)
 
@@ -41,22 +41,30 @@ FN_HOST=$(az functionapp list -g rg-notify-dev --query "[0].defaultHostName" -o 
 TITLE="${TITLE:-hello from claude}"
 BODY="${BODY:-smoke test}"
 
-BODY_JSON=$(jq -nc \
-  --arg t "$TITLE" --arg b "$BODY" \
+ENVELOPE=$(jq -nc \
+  --arg t "$TITLE" --arg b "$BODY" --arg id "$(uuidgen)" \
+  --arg time "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   '{
-    source: "Watchtower",
-    type:   "info",
-    title:  $t,
-    body:   $b,
-    priority: "normal",
-    tags:   ["smoke-test"]
+    specversion: "1.0",
+    type:        "notify.created.v1",
+    source:      "Watchtower",
+    id:          $id,
+    time:        $time,
+    datacontenttype: "application/json",
+    data: {
+      type:     "info",
+      title:    $t,
+      body:     $b,
+      priority: "normal",
+      tags:     ["smoke-test"]
+    }
   }')
 
 curl -sf -w "\nHTTP %{http_code}\n" \
   -H "x-api-key: $NOTIFY_KEY" \
-  -H "content-type: application/json" \
+  -H "Content-Type: application/cloudevents+json" \
   "https://$FN_HOST/v1/notifications" \
-  -d "$BODY_JSON"
+  -d "$ENVELOPE"
 ```
 
 Successful response: `202 Accepted` with `{"id":"<uuid-v7>"}`. The id can be used to look the document up in Cosmos `notifications` after Archive fans it out.
@@ -66,6 +74,7 @@ Successful response: `202 Accepted` with `{"id":"<uuid-v7>"}`. The id can be use
 | Status | Likely cause |
 |---|---|
 | `401` | `source` doesn't match the project the key is bound to, OR the key is wrong/inactive |
-| `400` | Schema violation — title/body length, tag charset, deeplink scheme not in {https, notify} |
-| `413` | Body > 8 KB (the `IngestionOptions.MaxRequestBodyBytes` limit) |
+| `400` | Schema violation — title/body length, tag charset, deeplink scheme not in {https, notify} — *or* malformed CloudEvent envelope (wrong `type`, missing `id`, etc.) |
+| `413` | Request body > 128 KB (the `IngestionOptions.MaxRequestBodyBytes` limit) |
+| `415` | Wrong `Content-Type` — must be `application/cloudevents+json`, `application/cloudevents-batch+json`, or binary mode with `ce-*` headers |
 | `202` | Success — but check APNs delivery: if no signed-in iOS user is approved in `allowedUsers`, Archive logs "zero registered users" and no push fires |

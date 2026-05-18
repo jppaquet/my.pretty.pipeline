@@ -366,13 +366,25 @@
       .map((t) => t.trim())
       .filter(Boolean);
 
-    const payload = {
+    // Wrap the notification payload in a CloudEvents 1.0 structured envelope.
+    // `source` identifies the producer project (also used by the server for
+    // the api-key project lookup); the payload itself goes inside `data`. The
+    // server mints a fresh internal id, so the envelope `id` here is just for
+    // CE compliance.
+    const envelope = {
+      specversion: "1.0",
+      type: "notify.created.v1",
       source: projectId,
-      type: stType.value,
-      title,
-      body,
-      priority: stPriority.value,
-      tags,
+      id: crypto.randomUUID(),
+      time: new Date().toISOString(),
+      datacontenttype: "application/json",
+      data: {
+        type: stType.value,
+        title,
+        body,
+        priority: stPriority.value,
+        tags,
+      },
     };
 
     $("st-send-btn").disabled = true;
@@ -381,10 +393,10 @@
       const r = await fetch(cfg.apiBase + "/v1/notifications", {
         method: "POST",
         headers: {
-          "content-type": "application/json",
+          "content-type": "application/cloudevents+json",
           "x-api-key": key,
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(envelope),
       });
       const text = await r.text();
       stResult.hidden = false;

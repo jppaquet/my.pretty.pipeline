@@ -1,12 +1,11 @@
-using System.Text.Json;
 using Notify.Shared.CloudEvents;
 using Notify.Shared.Hashing;
-using Notify.Shared.Json;
 using Notify.Shared.Validation;
 
 namespace Notify.Functions.Ingestion;
 
 // Pure ingestion logic; the Function class is a thin HTTP shim around it.
+// Accepts an already-parsed list of CloudEvents (single = list of 1).
 // Project lookup is behind IProjectLookup so unit tests don't need Cosmos;
 // publishing is behind IEventPublisher for the same reason.
 public sealed class IngestHandler
@@ -24,47 +23,85 @@ public sealed class IngestHandler
         _clock = clock ?? TimeProvider.System;
     }
 
-    public async Task<IngestResult> HandleAsync(string? apiKey, Stream body, long? contentLength, CancellationToken ct = default)
+    public async Task<IngestResult> HandleAsync(
+        string? apiKey,
+        IReadOnlyList<IngestInput> events,
+        bool isBatch,
+        CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(apiKey))
             return new IngestResult.Unauthorized();
 
-        if (contentLength is > IngestionOptions.MaxRequestBodyBytes)
-            return new IngestResult.PayloadTooLarge(IngestionOptions.MaxRequestBodyBytes);
+        if (events.Count == 0)
+            return new IngestResult.BadRequest(new[] { new ValidationFailure("events", "must contain at least one event") });
 
-        NotifyCreatedV1? input;
-        try
+        if (events.Count > IngestionOptions.MaxBatchSize)
+            return new IngestResult.BadRequest(new[]
+            {
+                new ValidationFailure("events", $"max {IngestionOptions.MaxBatchSize} events per batch, was {events.Count}"),
+            });
+
+        // One project per request: the request carries one x-api-key. All
+        // events in a batch must share the same `ce.source` so we can look up
+        // and verify the project once.
+        var firstSource = events[0].Source;
+        for (var i = 1; i < events.Count; i++)
         {
-            input = await JsonSerializer.DeserializeAsync<NotifyCreatedV1>(body, NotifyJson.Options, ct);
+            if (!string.Equals(events[i].Source, firstSource, StringComparison.Ordinal))
+            {
+                return new IngestResult.BadRequest(new[]
+                {
+                    new ValidationFailure($"events[{i}].source", $"all events in a batch must share source; expected '{firstSource}', was '{events[i].Source}'"),
+                });
+            }
         }
-        catch (JsonException ex)
-        {
-            return new IngestResult.BadRequest(new[] { new ValidationFailure("body", ex.Message) });
-        }
 
-        if (input is null)
-            return new IngestResult.BadRequest(new[] { new ValidationFailure("body", "missing") });
-
-        var validation = NotifyCreatedV1Validator.Validate(input);
-        if (!validation.IsValid)
-            return new IngestResult.BadRequest(validation.Failures);
-
-        var project = await _projects.FindAsync(input.Source, ct);
+        var project = await _projects.FindAsync(firstSource, ct);
         if (project is null || !project.Active || !_hasher.Verify(apiKey, project.Salt, project.KeyHash))
             return new IngestResult.Unauthorized();
 
-        var id = Guid.CreateVersion7();
-        var time = input.Timestamp ?? _clock.GetUtcNow();
-        var canonical = input with
+        // Server-lock source, mint id/time, validate, build envelope. Atomic:
+        // any per-event validation failure aborts the whole request before
+        // any publish happens.
+        var failures = new List<ValidationFailure>();
+        var ids = new string[events.Count];
+        var envelopes = new CloudEventEnvelope[events.Count];
+
+        for (var i = 0; i < events.Count; i++)
         {
-            Id = id.ToString(),
-            Timestamp = time,
-            Source = project.ProjectId,  // server-locks source to the authenticated project
-        };
+            var e = events[i];
+            var newId = Guid.CreateVersion7();
+            var time = e.Time ?? _clock.GetUtcNow();
+            var canonical = e.Data with
+            {
+                Id = newId.ToString(),
+                Timestamp = time,
+                Source = project.ProjectId,
+            };
 
-        var envelope = CloudEventEnvelope.From(canonical, id, time);
-        await _publisher.PublishAsync(envelope, ct);
+            var validation = NotifyCreatedV1Validator.Validate(canonical);
+            if (!validation.IsValid)
+            {
+                var prefix = isBatch ? $"events[{i}]." : string.Empty;
+                foreach (var f in validation.Failures)
+                    failures.Add(new ValidationFailure(prefix + f.Field, f.Message));
+                continue;
+            }
 
-        return new IngestResult.Accepted(canonical.Id!);
+            ids[i] = canonical.Id!;
+            envelopes[i] = CloudEventEnvelope.From(canonical, newId, time);
+        }
+
+        if (failures.Count > 0)
+            return new IngestResult.BadRequest(failures);
+
+        if (isBatch)
+            await _publisher.PublishBatchAsync(envelopes, ct);
+        else
+            await _publisher.PublishAsync(envelopes[0], ct);
+
+        return isBatch
+            ? new IngestResult.AcceptedBatch(ids)
+            : new IngestResult.Accepted(ids[0]);
     }
 }

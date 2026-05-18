@@ -14,9 +14,18 @@ internal sealed class InMemoryProjectLookup : IProjectLookup
 internal sealed class RecordingPublisher : IEventPublisher
 {
     public List<CloudEventEnvelope> Published { get; } = new();
+    public List<IReadOnlyList<CloudEventEnvelope>> Batches { get; } = new();
+
     public Task PublishAsync(CloudEventEnvelope envelope, CancellationToken ct = default)
     {
         Published.Add(envelope);
+        return Task.CompletedTask;
+    }
+
+    public Task PublishBatchAsync(IReadOnlyList<CloudEventEnvelope> envelopes, CancellationToken ct = default)
+    {
+        Batches.Add(envelopes);
+        foreach (var e in envelopes) Published.Add(e);
         return Task.CompletedTask;
     }
 }
