@@ -3,11 +3,22 @@ import SwiftUI
 struct NotificationDetailView: View {
     let notification: InboxNotification
 
+    // `interpretedSyntax: .full` parses block markdown (headers, lists,
+    // blockquotes) but stores the paragraph structure in
+    // `presentationIntent` attributes — SwiftUI's `Text(AttributedString)`
+    // doesn't render those visually, so every `\n\n` in the source
+    // collapsed into a single continuous flow of text. Switching to
+    // `.inlineOnlyPreservingWhitespace` keeps every `\n` as a literal
+    // newline in the output, which `Text` renders as a line break, and
+    // still applies bold/italic/strike/inline-code/link styling. Cost:
+    // headers/lists/code-fences no longer get block-level visual styling
+    // — they appear as raw markdown source on the correct line. That's
+    // the right trade-off until a real markdown renderer lands.
     private var attributedBody: AttributedString {
         (try? AttributedString(
             markdown: notification.body,
             options: AttributedString.MarkdownParsingOptions(
-                interpretedSyntax: .full,
+                interpretedSyntax: .inlineOnlyPreservingWhitespace,
                 failurePolicy: .returnPartiallyParsedIfPossible
             )
         )) ?? AttributedString(notification.body)
