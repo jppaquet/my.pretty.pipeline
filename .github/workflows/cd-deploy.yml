@@ -28,6 +28,8 @@ jobs:
     outputs:
       function_app_name: ${{ steps.outputs.outputs.functionAppName }}
       function_app_hostname: ${{ steps.outputs.outputs.functionAppHostname }}
+      admin_swa_name: ${{ steps.outputs.outputs.adminSwaName }}
+      admin_swa_hostname: ${{ steps.outputs.outputs.adminSwaHostname }}
       enable_archive_sub: ${{ steps.flags.outputs.archive }}
       enable_push_sub: ${{ steps.flags.outputs.push }}
     steps:
@@ -74,8 +76,12 @@ jobs:
         run: |
           NAME="${{ steps.deploy.outputs.functionAppName }}"
           HOST="${{ steps.deploy.outputs.functionAppHostname }}"
+          SWA_NAME="${{ steps.deploy.outputs.adminSwaName }}"
+          SWA_HOST="${{ steps.deploy.outputs.adminSwaHostname }}"
           echo "functionAppName=${NAME:-}" >> "$GITHUB_OUTPUT"
           echo "functionAppHostname=${HOST:-}" >> "$GITHUB_OUTPUT"
+          echo "adminSwaName=${SWA_NAME:-}" >> "$GITHUB_OUTPUT"
+          echo "adminSwaHostname=${SWA_HOST:-}" >> "$GITHUB_OUTPUT"
 
   # Single Function App, single project (Notify.Functions). Earlier matrix
   # publishes overwrote each other on Flex (one zip per Function App), so we
@@ -171,6 +177,60 @@ jobs:
             adminEntraTenantId=${{ vars.AZURE_TENANT_ID }}
             adminEntraAudience=${{ vars.ADMIN_AAD_AUDIENCE }}
           failOnStdErr: false
+
+  # Admin SPA upload. Only the `admin/` static content; no backend.
+  # Renders config.template.js → config.js with deploy-time values (tenant,
+  # client id, api base) before upload so the bundle stays generic in the
+  # repo but is fork-specific at runtime. Skipped unless the maintainer has
+  # set `ADMIN_AAD_AUDIENCE` (admin plane disabled otherwise — see PR-1).
+  publish-admin-swa:
+    needs: [deploy-infra, publish-functions]
+    if: |
+      success() &&
+      needs.deploy-infra.outputs.admin_swa_name != '' &&
+      vars.ADMIN_AAD_AUDIENCE != ''
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v3
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Render runtime config
+        run: |
+          set -eo pipefail
+          sed -e "s|__TENANT_ID__|${{ vars.AZURE_TENANT_ID }}|g" \
+              -e "s|__CLIENT_ID__|${{ vars.ADMIN_AAD_AUDIENCE }}|g" \
+              -e "s|__API_BASE__|https://${{ needs.deploy-infra.outputs.function_app_hostname }}|g" \
+              admin/config.template.js > admin/config.js
+
+      - name: Fetch SWA deploy token
+        id: token
+        run: |
+          set -eo pipefail
+          # SWA deploy token is an account-scoped secret retrievable via
+          # control-plane RBAC (Contributor on the SWA resource — the
+          # cd-deploy MI already has this via the RG-scoped grant). Captured
+          # as a step output and consumed only by the upload action below.
+          T=$(az staticwebapp secrets list \
+            --name "${{ needs.deploy-infra.outputs.admin_swa_name }}" \
+            -g "${{ vars.AZURE_RG_DEV }}" \
+            --query 'properties.apiKey' -o tsv)
+          echo "::add-mask::$T"
+          echo "deploy_token=$T" >> "$GITHUB_OUTPUT"
+
+      - name: Upload admin/ to SWA
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ steps.token.outputs.deploy_token }}
+          action: upload
+          app_location: admin
+          skip_app_build: true
+          skip_api_build: true
 
   # E2E runs against the deployed Function App after EG subs (if any) are
   # in place. Without a staging slot, "production" is the only target.

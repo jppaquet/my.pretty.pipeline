@@ -1,0 +1,180 @@
+* { box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  margin: 0;
+  background: #fafafa;
+  color: #111;
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 2rem;
+  background: #111;
+  color: #fff;
+}
+
+header h1 { margin: 0; font-size: 1.1rem; font-weight: 500; letter-spacing: 0.05em; }
+
+#user-bar { font-size: 0.85rem; display: flex; gap: 0.5rem; align-items: center; }
+#user-label { color: #ccc; }
+
+main { padding: 2rem; max-width: 1100px; margin: 0 auto; }
+
+button {
+  background: #111;
+  color: #fff;
+  border: 0;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+  border-radius: 3px;
+}
+button:hover { background: #333; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+button.danger { background: #b00020; }
+button.danger:hover { background: #d12238; }
+
+.row { display: flex; gap: 1rem; align-items: center; margin-bottom: 1rem; }
+.status { color: #666; font-size: 0.85rem; }
+.status.error { color: #b00020; }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+th, td {
+  text-align: left;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid #eee;
+  font-size: 0.9rem;
+}
+th { background: #f5f5f5; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+td.sub { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 0.8rem; word-break: break-all; }
+
+.badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 3px; font-size: 0.7rem; font-weight: 600; }
+.badge.approved { background: #c8f7c5; color: #1b5e20; }
+.badge.pending { background: #fff4c5; color: #6b5500; }
+
+td.muted { color: #999; font-size: 0.8rem; }
+
+#signin-section { text-align: center; padding: 4rem 0; }
+#signin-section button { font-size: 1rem; padding: 0.8rem 1.6rem; }
+
+/* tabs */
+.tabs { display: flex; gap: 0; border-bottom: 1px solid #ddd; margin-bottom: 1.5rem; }
+.tab {
+  background: transparent;
+  color: #666;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 0.6rem 1.2rem;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-radius: 0;
+  cursor: pointer;
+}
+.tab:hover { background: transparent; color: #111; }
+.tab.active { color: #111; border-bottom-color: #111; }
+
+/* mint dialog */
+dialog {
+  border: 0;
+  border-radius: 6px;
+  padding: 1.5rem 1.8rem;
+  min-width: 420px;
+  max-width: 560px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+}
+dialog::backdrop { background: rgba(0, 0, 0, 0.4); }
+dialog h2 { margin-top: 0; }
+dialog label {
+  display: block;
+  margin: 0.8rem 0;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+dialog input[type="text"] {
+  display: block;
+  width: 100%;
+  padding: 0.5rem 0.7rem;
+  margin-top: 0.3rem;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  font-size: 0.95rem;
+  font-family: inherit;
+}
+dialog small { display: block; margin-top: 0.25rem; }
+.dialog-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1.2rem; }
+.muted { color: #888; font-size: 0.85rem; }
+
+.key-display {
+  background: #f5f5f5;
+  padding: 0.8rem 1rem;
+  border-radius: 3px;
+  margin: 1rem 0;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.key-display code {
+  flex: 1;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.85rem;
+  word-break: break-all;
+  user-select: all;
+}
+
+.confirm-row { font-size: 0.9rem !important; font-weight: normal !important; display: flex; gap: 0.4rem; align-items: center; }
+.confirm-row input { margin: 0; }
+
+/* send-test form */
+.card {
+  background: #fff;
+  padding: 1.2rem 1.5rem;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  max-width: 640px;
+}
+.card label {
+  display: block;
+  margin: 0.6rem 0;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+.card input[type="text"],
+.card input[type="password"],
+.card textarea,
+.card select {
+  display: block;
+  width: 100%;
+  padding: 0.5rem 0.7rem;
+  margin-top: 0.3rem;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  font-size: 0.95rem;
+  font-family: inherit;
+}
+.card textarea { resize: vertical; }
+.card small { display: block; margin-top: 0.25rem; }
+.form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+
+.result-pane {
+  background: #f5f5f5;
+  border-radius: 3px;
+  padding: 0.8rem 1rem;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.82rem;
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin: 1rem 0 0.5rem;
+  max-height: 240px;
+  overflow: auto;
+}
+.result-pane.error { color: #b00020; background: #fef0f1; }

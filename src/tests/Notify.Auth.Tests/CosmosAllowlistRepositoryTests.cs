@@ -9,7 +9,8 @@ namespace Notify.Auth.Tests;
 // self-registration + race + cache behaviors match production semantics
 // rather than a mocked Container.
 [Trait("Category", "Integration")]
-public class CosmosAllowlistRepositoryTests : IClassFixture<CosmosEmulatorFixture>
+[Collection("Cosmos")]
+public class CosmosAllowlistRepositoryTests
 {
     private const string SubA = "001234.aaaaaaaa";
     private const string SubB = "005678.bbbbbbbb";
