@@ -33,11 +33,15 @@
     },
   });
 
-  // App-id-uri scope. The Entra app registration must expose an API scope
-  // (the FORK-SETUP bootstrap mints `access_as_user`); requesting
-  // `${api://<clientId>}/.default` returns the union of all granted scopes
-  // for this app, which includes the role-bearing access token.
-  const scopes = ["api://" + cfg.clientId + "/.default"];
+  // App-id-uri scope. The Entra app registration exposes `access_as_user`
+  // (minted by FORK-SETUP §7's bootstrap). We must request that explicit
+  // scope by URI — not `${api://<clientId>}/.default` — because when the
+  // SPA's client and the API's resource are the same app registration,
+  // Entra rejects `.default` with AADSTS90009 ("Application is requesting
+  // a token for itself"). The `.default` shortcut is for client-credentials
+  // flows where client ≠ resource. The token returned still carries the
+  // user's `roles` claim, which is what AdminAuthMiddleware checks.
+  const scopes = ["api://" + cfg.clientId + "/access_as_user"];
 
   let account = null;
 
