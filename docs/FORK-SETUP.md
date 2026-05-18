@@ -205,96 +205,177 @@ Function App resolves this via `@Microsoft.KeyVault(...)`; it'll pick up
 the new secret on its next cold start (or restart it: `az functionapp
 restart -g "$RG" -n <function-app-name>`).
 
-### Optional: enable the admin plane
+### Optional: enable the admin plane (web app at `<swa>.azurestaticapps.net`)
 
-The `/admin/*` routes (used by the admin web app — see [admin/](../admin/))
-default to **disabled** — `AdminAuthMiddleware` returns `503 admin plane
-not configured` until you create an Entra app registration and feed the
-two ids back to bicep. Skip this section if you only need the iOS path.
+The admin web app lives in [`admin/`](../admin/). It's a vanilla-JS SPA hosted on
+Azure Static Web Apps; it signs you in with Entra ID + MFA and lets you
+manage the producer-key list and the tester allowlist from a browser.
+Skip this section if you only need the iOS-side flow.
+
+**The bring-up is two-phase** because the SPA redirect URI has to match
+the SWA's hostname, and that hostname doesn't exist until bicep provisions
+the SWA. Order:
+
+1. **First cd-deploy** (done in §5 above) — provisions the SWA, then the
+   `publish-admin-swa` job _skips_ because `ADMIN_AAD_AUDIENCE` is unset.
+   `/v1/admin/*` returns `503 admin plane not configured` if anyone asks.
+2. **Entra bootstrap** (this section) — creates the app reg, mints the
+   role + scope, hooks the SWA hostname in as a redirect URI, assigns you
+   the Admin role, and sets `ADMIN_AAD_AUDIENCE`.
+3. **Second cd-deploy** (`gh workflow run cd-deploy.yml`) — picks up
+   `ADMIN_AAD_AUDIENCE`, sets the Function App's `Admin__*` env vars,
+   renders `admin/config.template.js` → `config.js`, uploads `admin/` to
+   the SWA, and adds the SWA origin to the Function App's CORS allow-list.
+
+If the SWA from step 1 doesn't exist yet, run cd-deploy first, then come
+back here.
 
 ```sh
-TENANT=$(az account show --query tenantId -o tsv)
+# ── Phase 2: Entra bootstrap ────────────────────────────────────────
 
-# 1. Create the app registration. Single-tenant; SPA redirect for MSAL.js.
+# 0. Sanity-check the SWA from phase 1 exists.
+SWA_HOST=$(az staticwebapp list -g "$RG" --query "[0].defaultHostname" -o tsv)
+test -n "$SWA_HOST" || { echo "no SWA yet — run cd-deploy.yml first"; exit 1; }
+echo "SWA host: $SWA_HOST"
+
+# 1. Create the app registration. Single-tenant; consumed by both the
+#    SPA (client) and the Function App (resource) — same appId on both
+#    sides, so requesting `.default` would fail (AADSTS90009).
 ADMIN_APP=$(az ad app create --display-name "my.pretty.pipeline-admin" \
   --sign-in-audience AzureADMyOrg \
   --query appId -o tsv)
+echo "appId: $ADMIN_APP"
 
-# 2. Mint the Admin app role and patch it onto the registration. The role
-#    `value` is what lands in the JWT `roles` claim — EntraJwtValidator
-#    requires exactly "Admin" (configurable via Admin__RequiredRole).
-ROLE_JSON=$(jq -nc --arg id "$(uuidgen)" '
-  [{ id: $id, displayName: "Admin", description: "Manage producer keys and approve testers",
-     value: "Admin", isEnabled: true, allowedMemberTypes: ["User"] }]')
-az ad app update --id "$ADMIN_APP" --set "appRoles=$ROLE_JSON"
+# Brief wait — Graph propagation can lag the create.
+sleep 5
 
-# 3. Expose an API scope so MSAL.js can request a Bearer token bound to
-#    this app's audience. The scope id is arbitrary; `access_as_user` is
-#    the conventional name. Identifier URI must be `api://<clientId>`.
-SCOPE_ID=$(uuidgen)
-IDENTIFIER_URI="api://$ADMIN_APP"
-SCOPE_JSON=$(jq -nc --arg id "$SCOPE_ID" --arg uri "$IDENTIFIER_URI" '{
-  requestedAccessTokenVersion: 2,
-  oauth2PermissionScopes: [{
-    id: $id, adminConsentDescription: "Manage the admin plane",
-    adminConsentDisplayName: "Manage the admin plane",
-    isEnabled: true, type: "User", value: "access_as_user"
-  }]
-}')
-az ad app update --id "$ADMIN_APP" \
-  --identifier-uris "$IDENTIFIER_URI" \
-  --set "api=$SCOPE_JSON"
+OBJECT_ID=$(az ad app show --id "$ADMIN_APP" --query id -o tsv)
+ROLE_ID=$(uuidgen | tr 'A-Z' 'a-z')
+SCOPE_ID=$(uuidgen | tr 'A-Z' 'a-z')
 
-# 4. Once cd-deploy has provisioned the Static Web App, pull its hostname
-#    and add it as the SPA redirect URI so MSAL.js can complete the login
-#    redirect back to the SPA. Re-run this command if you ever recreate
-#    the SWA (the hostname is salted with a per-RG hash).
-SWA_HOST=$(az staticwebapp list -g "$RG" --query "[0].defaultHostname" -o tsv)
-az ad app update --id "$ADMIN_APP" \
-  --set "spa.redirectUris=['https://$SWA_HOST']"
+# 2. Single Graph PATCH to set the identifier URI, mint the Admin app
+#    role, expose the `access_as_user` API scope, and pin the SPA
+#    redirect URI to the SWA hostname. Doing all four in one PATCH
+#    avoids a sequence of `az ad app update --set "..."` calls that
+#    each have finicky JSON-escaping behavior.
+PATCH_BODY=$(jq -nc \
+  --arg appUri "api://$ADMIN_APP" \
+  --arg spa "https://$SWA_HOST" \
+  --arg roleId "$ROLE_ID" \
+  --arg scopeId "$SCOPE_ID" \
+  '{
+     identifierUris: [$appUri],
+     appRoles: [{
+       id: $roleId,
+       displayName: "Admin",
+       description: "Manage producer keys and approve testers",
+       value: "Admin",
+       isEnabled: true,
+       allowedMemberTypes: ["User"]
+     }],
+     api: {
+       requestedAccessTokenVersion: 2,
+       oauth2PermissionScopes: [{
+         id: $scopeId,
+         value: "access_as_user",
+         type: "User",
+         isEnabled: true,
+         adminConsentDescription: "Manage the admin plane",
+         adminConsentDisplayName: "Manage the admin plane"
+       }]
+     },
+     spa: { redirectUris: [$spa] }
+   }')
 
-# 5. Assign yourself the Admin role.
-ME=$(az ad signed-in-user show --query id -o tsv)
+az rest --method PATCH \
+  --uri "https://graph.microsoft.com/v1.0/applications/$OBJECT_ID" \
+  --headers "content-type=application/json" \
+  --body "$PATCH_BODY" >/dev/null
+
+# 3. Service principal so the role assignment in step 4 has a
+#    resourceId to point at.
 SP_ID=$(az ad sp create --id "$ADMIN_APP" --query id -o tsv 2>/dev/null \
         || az ad sp show --id "$ADMIN_APP" --query id -o tsv)
-APP_ROLE_ID=$(echo "$ROLE_JSON" | jq -r '.[0].id')
+
+# 4. Assign yourself the Admin role on the new app's SP.
+ME=$(az ad signed-in-user show --query id -o tsv)
 az rest --method POST \
   --uri "https://graph.microsoft.com/v1.0/users/$ME/appRoleAssignments" \
-  --body "{\"principalId\":\"$ME\",\"resourceId\":\"$SP_ID\",\"appRoleId\":\"$APP_ROLE_ID\"}"
+  --headers "content-type=application/json" \
+  --body "$(jq -nc --arg p "$ME" --arg r "$SP_ID" --arg ar "$ROLE_ID" \
+           '{principalId:$p, resourceId:$r, appRoleId:$ar}')" >/dev/null
 
-# 6. Wire the audience into cd-deploy via a repo variable. tenantId is
-#    already in `AZURE_TENANT_ID`.
+# 5. Wire the audience into cd-deploy via a repo variable. tenantId is
+#    already in `AZURE_TENANT_ID` from §4.
 gh variable set ADMIN_AAD_AUDIENCE --body "$ADMIN_APP"
+echo "ADMIN_AAD_AUDIENCE = $ADMIN_APP"
 ```
 
-Next `cd-deploy` run picks up `ADMIN_AAD_AUDIENCE` + `AZURE_TENANT_ID` and:
+```sh
+# ── Phase 3: second cd-deploy uploads the SPA ───────────────────────
+gh workflow run cd-deploy.yml --ref main
+gh run watch
+```
+
+This run sees `vars.ADMIN_AAD_AUDIENCE != ''` and:
 1. Sets `Admin__EntraTenantId` / `Admin__EntraAudience` on the Function App.
-2. Adds the SWA origin to the Function App's CORS allowed-origins.
-3. Renders `admin/config.template.js` → `admin/config.js` with your tenant +
-   audience + Function-App hostname, then uploads the `admin/` folder to
-   the Static Web App.
+2. Adds `https://$SWA_HOST` to the Function App's CORS allowed-origins.
+3. Renders `admin/config.template.js` → `config.js` (substituting your tenant
+   + appId + Function-App hostname), then uploads the `admin/` folder via
+   the SWA deploy action.
 
-MFA is enforced through Entra **Security Defaults** (Free tier; on by
-default for new tenants since 2019). Verify in portal → Entra ID →
-Properties → "Security defaults" = Enabled.
+MFA is enforced via Entra **Security Defaults** (Free tier; on by default
+for new tenants since 2019). Verify at portal → Entra ID → Properties →
+"Security defaults" = Enabled. No P1 license needed.
 
-After cd-deploy completes, open the SWA hostname in a browser
-(`echo "https://$SWA_HOST"`), click **Sign in**, do MFA, and you'll land
-on the allowlist table. Approve / revoke buttons hit the Function App
-directly via Bearer auth.
+```sh
+# ── Phase 4: sign in ────────────────────────────────────────────────
+echo "https://$SWA_HOST"   # open in browser
+# Sign in → MFA → land on the testers tab.
+```
 
-To smoke-test the backend alone (no SPA):
+You'll see three tabs:
+- **testers** — list `allowedUsers` rows, approve/revoke (see "Approving
+  testers" below).
+- **projects** — mint a new producer (`npk_…`) key, list active +
+  revoked, revoke. **Key is shown exactly once on mint** — store it before
+  dismissing the dialog.
+- **send test** — paste an `npk_` key and POST through the Ingest API to
+  exercise the full pipeline (Ingest → EventGrid → Archive + Push → APNs
+  → device).
+
+### Smoke-test the admin API without the SPA
+
+If you want to verify backend wiring before (or instead of) the SPA, mint
+a Bearer token from the CLI and hit the endpoint directly. Note the route
+prefix is **`/v1/admin/`**, not bare `/admin/` — the Functions host
+reserves `/admin/*` for its own runtime management API.
+
 ```sh
 TOKEN=$(az account get-access-token \
   --resource "api://$ADMIN_APP" --query accessToken -o tsv)
 FN_HOST=$(az functionapp list -g "$RG" --query "[0].defaultHostName" -o tsv)
 curl -s -H "Authorization: Bearer $TOKEN" \
-  "https://$FN_HOST/admin/allowlist" | jq .
+  "https://$FN_HOST/v1/admin/allowlist" | jq .
 ```
 
-You'll get `{"items":[…]}` once you can mint a token that carries the
-Admin role (CLI tokens require [`az login --scope api://$ADMIN_APP/.default`](https://learn.microsoft.com/en-us/cli/azure/account#az-account-get-access-token)
-or going through the SPA redirect flow).
+You'll get `{"items":[…]}` if the token carries the Admin role and the
+Function App has the admin plane configured. If your CLI session isn't
+already scoped to this app, run `az login --scope api://$ADMIN_APP/.default`
+first — the role claim only appears on tokens minted against this scope.
+
+### Admin-plane troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `503 admin plane not configured` on any `/v1/admin/*` | `Admin__EntraTenantId` or `Admin__EntraAudience` empty | Phase 3 hasn't run since you set `ADMIN_AAD_AUDIENCE` — `gh workflow run cd-deploy.yml --ref main` |
+| `404` on `/v1/admin/*` (no JSON body) | You hit `/admin/...` instead of `/v1/admin/...` | Add the `/v1/` prefix — the host reserves bare `/admin/*` |
+| `401 invalid bearer token` on `/v1/admin/*` | Token is valid Entra but doesn't carry `roles: ["Admin"]` | Re-run step 4 (`appRoleAssignments` POST). Verify in portal → Enterprise Apps → my.pretty.pipeline-admin → Users and groups |
+| `AADSTS90009` in browser on sign-in | SPA requested `.default` scope (same-app trap) | Use the explicit scope; already done in `admin/app.js`. If you forked and customized, check the scope is `api://<appId>/access_as_user` |
+| `Can't find variable: msalBrowser` in console | UMD global name is `msal`, not `msalBrowser` | already wired correctly in shipped code — confirm `admin/app.js` references `new msal.PublicClientApplication(...)` |
+| Sign-in 200s but browser shows `404` on testers/projects tabs | SPA points at `/admin/...` instead of `/v1/admin/...` | Already fixed; if you forked, grep `admin/app.js` for `"/admin/"` and replace |
+| `publish-admin-swa` job _skipped_ | `vars.ADMIN_AAD_AUDIENCE` not set | Re-run Phase 2 step 5 + `gh workflow run cd-deploy.yml` |
+| SPA shows "config.js missing or unrendered" | cd-deploy uploaded the template literally without substituting; check the `Render runtime config` step in the publish-admin-swa job for the sed invocation |
 
 ## 8. Build + run the iOS app
 
