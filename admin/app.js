@@ -16,7 +16,10 @@
     return;
   }
 
-  const msal = new msalBrowser.PublicClientApplication({
+  // The UMD bundle exposes itself as `window.msal`, not `window.msalBrowser`
+  // — verified against the v3.20.0 minified source. Naming the
+  // PublicClientApplication instance `pca` avoids shadowing the namespace.
+  const pca = new msal.PublicClientApplication({
     auth: {
       clientId: cfg.clientId,
       authority: "https://login.microsoftonline.com/" + cfg.tenantId,
@@ -46,9 +49,9 @@
 
   // ── sign-in ────────────────────────────────────────────────────────
   async function init() {
-    await msal.initialize();
-    const result = await msal.handleRedirectPromise();
-    account = (result && result.account) || msal.getAllAccounts()[0] || null;
+    await pca.initialize();
+    const result = await pca.handleRedirectPromise();
+    account = (result && result.account) || pca.getAllAccounts()[0] || null;
     render();
     if (account) {
       await loadAllowlist();
@@ -71,9 +74,9 @@
   }
 
   $("signin-btn").addEventListener("click", () =>
-    msal.loginRedirect({ scopes }));
+    pca.loginRedirect({ scopes }));
   $("signout-btn").addEventListener("click", () =>
-    msal.logoutRedirect({ postLogoutRedirectUri: window.location.origin }));
+    pca.logoutRedirect({ postLogoutRedirectUri: window.location.origin }));
 
   // ── tab switcher ────────────────────────────────────────────────────
   document.querySelectorAll(".tab").forEach((btn) => {
@@ -89,10 +92,10 @@
   // ── token acquisition ──────────────────────────────────────────────
   async function getToken() {
     try {
-      const r = await msal.acquireTokenSilent({ account, scopes });
+      const r = await pca.acquireTokenSilent({ account, scopes });
       return r.accessToken;
     } catch (e) {
-      await msal.acquireTokenRedirect({ scopes });
+      await pca.acquireTokenRedirect({ scopes });
       return null;
     }
   }
