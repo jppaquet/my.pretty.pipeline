@@ -224,7 +224,12 @@ jobs:
           echo "deploy_token=$T" >> "$GITHUB_OUTPUT"
 
       - name: Upload admin/ to SWA
-        uses: Azure/static-web-apps-deploy@v1
+        # Pinned to commit SHA (current v1) per CodeQL "Unpinned tag for a
+        # 3rd-party Action" advisory. Re-resolve via
+        #   gh api repos/Azure/static-web-apps-deploy/git/ref/tags/v1
+        # when bumping the major; keep the trailing `# v1` comment in sync
+        # so the version is greppable.
+        uses: Azure/static-web-apps-deploy@1a947af9992250f3bc2e68ad0754c0b0c11566c9 # v1
         with:
           azure_static_web_apps_api_token: ${{ steps.token.outputs.deploy_token }}
           action: upload
