@@ -1,7 +1,7 @@
 // Admin SPA logic. Concerns:
 //   1. MSAL.js redirect-flow sign-in against the Entra app registration in
 //      window.__ADMIN_CONFIG__ (rendered from config.template.js at deploy).
-//   2. Calling /admin/* on the Function App with a Bearer access token.
+//   2. Calling /v1/admin/* on the Function App with a Bearer access token.
 //   3. Two tabs: testers (allowlist) and projects (producer keys).
 //
 // Vanilla JS, no build step. Each tab is one table + the small bit of logic
@@ -139,7 +139,7 @@
   async function loadAllowlist() {
     setStatus("allowlist-status", "loading…");
     try {
-      const data = await api("/admin/allowlist");
+      const data = await api("/v1/admin/allowlist");
       renderAllowlist(data.items || []);
       setStatus("allowlist-status", (data.items?.length || 0) + " rows");
     } catch (e) {
@@ -182,7 +182,7 @@
     btn.disabled = true;
     setStatus("allowlist-status", op + " " + sub + "…");
     try {
-      await api("/admin/allowlist/" + encodeURIComponent(sub) + "/" + op, "POST");
+      await api("/v1/admin/allowlist/" + encodeURIComponent(sub) + "/" + op, "POST");
       await loadAllowlist();
     } catch (e) {
       setStatus("allowlist-status", e.message, true);
@@ -198,7 +198,7 @@
   async function loadProjects() {
     setStatus("projects-status", "loading…");
     try {
-      const data = await api("/admin/projects");
+      const data = await api("/v1/admin/projects");
       renderProjects(data.items || []);
       setStatus("projects-status", (data.items?.length || 0) + " projects");
     } catch (e) {
@@ -241,7 +241,7 @@
     btn.disabled = true;
     setStatus("projects-status", "revoking " + id + "…");
     try {
-      await api("/admin/projects/" + encodeURIComponent(id) + "/revoke", "POST");
+      await api("/v1/admin/projects/" + encodeURIComponent(id) + "/revoke", "POST");
       await loadProjects();
     } catch (e) {
       setStatus("projects-status", e.message, true);
@@ -283,7 +283,7 @@
       return;
     }
     try {
-      const data = await api("/admin/projects", "POST", { projectId, displayName });
+      const data = await api("/v1/admin/projects", "POST", { projectId, displayName });
       mintKeyEl.textContent = data.key;
       mintFormStep.hidden = true;
       mintResultStep.hidden = false;

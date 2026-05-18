@@ -24,7 +24,7 @@ public sealed class ProjectsAdminFunction
 
     [Function("AdminListProjects")]
     public async Task<HttpResponseData> List(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "admin/projects")]
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "v1/admin/projects")]
         HttpRequestData req,
         FunctionContext ctx)
     {
@@ -35,7 +35,7 @@ public sealed class ProjectsAdminFunction
 
     [Function("AdminMintProject")]
     public async Task<HttpResponseData> Mint(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "admin/projects")]
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "v1/admin/projects")]
         HttpRequestData req,
         FunctionContext ctx)
     {
@@ -63,7 +63,7 @@ public sealed class ProjectsAdminFunction
 
     [Function("AdminRevokeProject")]
     public async Task<HttpResponseData> Revoke(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "admin/projects/{id}/revoke")]
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "v1/admin/projects/{id}/revoke")]
         HttpRequestData req,
         FunctionContext ctx,
         string id)
