@@ -243,8 +243,12 @@ jobs:
           azure_static_web_apps_api_token: ${{ steps.token.outputs.deploy_token }}
           action: upload
           app_location: admin
+          # No build step needed — admin/ is pre-rendered (config.js was
+          # substituted in an earlier workflow step). `skip_app_build` is
+          # the only documented bypass; `api_location` is left unset, so
+          # no api-build runs either (the action only builds an api when
+          # an api_location is given).
           skip_app_build: true
-          skip_api_build: true
 
   # E2E runs against the deployed Function App after EG subs (if any) are
   # in place. Without a staging slot, "production" is the only target.
