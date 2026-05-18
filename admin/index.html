@@ -5,15 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>my.pretty.pipeline — admin</title>
   <link rel="stylesheet" href="app.css">
-  <!-- MSAL Browser via Microsoft CDN. Pinned to a 3.x build; the SDK is
-       backwards-compatible within 3.x. CSP in staticwebapp.config.json
-       only allows scripts from this origin + alcdn.msauth.net.
-       SRI hash computed from the actual 3.20.0 minified bundle; if you
-       bump the version, recompute via:
-         curl -sL <url> | openssl dgst -sha384 -binary | openssl base64 -A
-  -->
-  <script src="https://alcdn.msauth.net/browser/3.20.0/js/msal-browser.min.js"
-          integrity="sha384-HG/8VcAWBN3U9IvhEpTdPsmtjZvwI0BPHwBYuByKLvYhbBxqDjkct5sQTaY79m2o"
+  <!-- MSAL Browser via jsDelivr (the @azure/msal-browser npm package mirror).
+       The Azure-internal `alcdn.msauth.net` host I tried originally is for
+       AAD B2C custom-policy assets and does not serve MSAL; jsDelivr is the
+       community-blessed CDN that hosts the npm-published artifact.
+       Pinned to a specific 3.x bundle so SRI doesn't drift; bump the
+       version in the URL + recompute the hash via:
+         curl -sL --compressed <url> | openssl dgst -sha384 -binary | openssl base64 -A
+       The `--compressed` flag matters — SRI is over the decoded bytes.
+       CSP host in staticwebapp.config.json updated to match. -->
+  <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.20.0/lib/msal-browser.min.js"
+          integrity="sha384-quwDgJEhFKGnZvrrI3o28LV9t3stm9qLPWHTn8nepyfYbvbYgddhYT0Vrwq54oqJ"
           crossorigin="anonymous"></script>
   <script src="config.js"></script>
 </head>
