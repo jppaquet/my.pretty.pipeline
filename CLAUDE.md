@@ -27,7 +27,7 @@ docs/                             SCHEMA, DEPLOY, PROJECT-ONBOARDING, FORK-SETUP
 ## Commands
 - Tests: `cd src && dotnet test` (or `dotnet test --filter Category=Integration` once Phase 1 lands).
 - Strict build: `dotnet build src/Notify.slnx -c Release -warnaserror`.
-- Local emulators: `docker compose up -d` (Azurite + Cosmos emulator + EG stub).
+- Local emulator: `docker compose up -d` boots the Cosmos Linux emulator only (Azurite + EG-stub services were unused weight and got dropped). `dotnet test --filter Category=Integration` runs the Archive + Inbox + Auth suites against it. Pure unit tests don't need it.
 - iOS: `open app/Notify.xcodeproj`.
 
 ## Conventions
