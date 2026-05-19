@@ -27,6 +27,14 @@ struct InboxView: View {
                                 .accessibilityElement(children: .combine)
                                 .accessibilityIdentifier("inbox.row.\(item.id)")
                                 .listRowBackground(item.priority.rowBackground)
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    Button(role: .destructive) {
+                                        Task { await viewModel.delete(id: item.id) }
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+                                    .accessibilityIdentifier("inbox.row.\(item.id).delete")
+                                }
                         }
                     } else {
                         let sections = groupedSections(items: items, by: viewModel.grouping)
@@ -39,6 +47,14 @@ struct InboxView: View {
                                             .accessibilityElement(children: .combine)
                                             .accessibilityIdentifier("inbox.row.\(item.id)")
                                             .listRowBackground(item.priority.rowBackground)
+                                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                                Button(role: .destructive) {
+                                                    Task { await viewModel.delete(id: item.id) }
+                                                } label: {
+                                                    Label("Delete", systemImage: "trash")
+                                                }
+                                                .accessibilityIdentifier("inbox.row.\(item.id).delete")
+                                            }
                                     }
                                 }
                             } header: {
@@ -120,6 +136,12 @@ private struct InboxRow: View {
         )) ?? AttributedString(notification.body)
     }
 
+    // Unread = no `isRead` field OR `isRead == false`. The title gets a
+    // heavier weight so the row stands out from already-opened siblings;
+    // the prefix dot reinforces it for users on Smart Invert / increased-
+    // contrast settings where font-weight alone is hard to read.
+    private var isUnread: Bool { notification.isRead != true }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
@@ -135,14 +157,24 @@ private struct InboxRow: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
-            Text(notification.title)
-                .font(.headline)
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                if isUnread {
+                    Circle()
+                        .fill(Color.accentColor)
+                        .frame(width: 8, height: 8)
+                        .accessibilityHidden(true)
+                }
+                Text(notification.title)
+                    .font(.headline)
+                    .fontWeight(isUnread ? .bold : .regular)
+            }
             Text(attributedBody)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
         }
         .padding(.vertical, 2)
+        .accessibilityLabel(Text(isUnread ? "Unread. \(notification.title)" : notification.title))
     }
 }
 

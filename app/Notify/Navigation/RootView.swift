@@ -53,6 +53,15 @@ struct RootView: View {
                 )
             }
         }
+        // Mark as read when the user opens a notification — covers both
+        // iPhone (NavigationLink push via selection) and iPad (split-view
+        // detail swap). Mutation is idempotent; tapping the same row twice
+        // is a no-op (the VM early-returns if isRead is already true).
+        .onChange(of: selection) { _, newValue in
+            if let id = newValue {
+                Task { await inboxViewModel.markRead(id: id) }
+            }
+        }
         .task {
             #if !LOCAL_UI_PREVIEW
             // Ask for push permission once. Token POST happens later when

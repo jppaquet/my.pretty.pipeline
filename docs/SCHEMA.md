@@ -141,7 +141,9 @@ backend credential.
       "metadata": null,
       "deduplicationKey": "backup-2026-04-28",
       "timestamp": "2026-04-28T14:00:00Z",
-      "envelopeId": "…"
+      "envelopeId": "…",
+      "isRead": false,            // optional; absent on rows written before the field existed
+      "isHidden": false           // optional; rows with isHidden=true are filtered out of this response
     }
     // … newest first
   ],
@@ -150,7 +152,9 @@ backend credential.
 ```
 
 Same `NotificationDocument` shape that Archive writes — see
-`src/Notify.Shared/Cosmos/NotificationDocument.cs`.
+`src/Notify.Shared/Cosmos/NotificationDocument.cs`. `isHidden=true` rows are
+filtered server-side; absent `isRead` / `isHidden` (pre-migration rows) is
+treated as `false`.
 
 ## Errors
 
@@ -158,6 +162,43 @@ Same `NotificationDocument` shape that Archive writes — see
   `{ "errors": [ { "field": "limit", "message": "…" } ] }`.
 - `401` — missing or invalid `Authorization: Bearer …` (JwtAuthMiddleware
   rejects tokens with bad signature, wrong issuer/audience, or expired).
+
+---
+
+# Inbox mutation API
+
+Per-recipient mutations on a single archived notification row. Same Bearer-JWT
+auth as `GET /v1/inbox`. Each endpoint touches one document, partitioned by
+`source` (sent as a query parameter). The `id` in the path is the **full**
+document id (`{baseId}:{userId}`) the client received in the inbox response;
+the server asserts the trailing `:{userId}` matches the JWT `sub` before
+mutating so a token holder can only flip their own rows.
+
+## Mark as read — `POST /v1/inbox/{id}/read?source=<source>`
+
+```sh
+curl -sf -X POST -H "Authorization: Bearer $JWT" \
+  "$NOTIFY_URL/v1/inbox/55555555-…:001234.abc/read?source=home-pipeline"
+```
+
+- `204 No Content` — `isRead` set to `true`. Idempotent (re-call is harmless).
+- `400` — missing `source` query param, or `id` not in `{baseId}:{userId}` form.
+- `401` — missing/invalid Bearer.
+- `403` — `id` userId suffix doesn't match the JWT `sub`.
+- `404` — no document at that `(source, id)` partition (Archive hasn't fanned
+  out to this user, or the row already expired via TTL).
+
+## Soft-delete — `DELETE /v1/inbox/{id}?source=<source>`
+
+```sh
+curl -sf -X DELETE -H "Authorization: Bearer $JWT" \
+  "$NOTIFY_URL/v1/inbox/55555555-…:001234.abc?source=home-pipeline"
+```
+
+Sets `isHidden=true` on the document. The row is filtered out of subsequent
+`GET /v1/inbox` responses, but the document stays in Cosmos until the 90-day
+TTL expires. Same response semantics as the read endpoint (`204`, `400`,
+`401`, `403`, `404`). Idempotent.
 
 # Device registration API (`POST /v1/devices`)
 

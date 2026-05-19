@@ -117,4 +117,81 @@ final class InboxViewModelTests: XCTestCase {
 
         XCTAssertEqual(api.inboxCalls.first?.source, "alerts")
     }
+
+    // ── markRead / delete ──────────────────────────────────────────
+
+    func testMarkReadFlipsLocalAndCallsAPI() async {
+        let api = MockNotifyAPI()
+        let item = sample("home", offsetSeconds: 0)
+        api.pages = [InboxPage(items: [item], continuationToken: nil)]
+
+        let vm = InboxViewModel(api: api)
+        await vm.load()
+        await vm.markRead(id: item.id)
+
+        guard case .loaded(let items, _) = vm.state else {
+            return XCTFail("Expected .loaded, got \(vm.state)")
+        }
+        XCTAssertEqual(items.first?.isRead, true)
+        XCTAssertEqual(api.markReadCalls, [InboxItemCall(id: item.id, source: "home")])
+    }
+
+    func testMarkReadIsIdempotentWhenAlreadyRead() async {
+        let api = MockNotifyAPI()
+        var item = sample("home", offsetSeconds: 0)
+        item.isRead = true
+        api.pages = [InboxPage(items: [item], continuationToken: nil)]
+
+        let vm = InboxViewModel(api: api)
+        await vm.load()
+        await vm.markRead(id: item.id)
+
+        XCTAssertEqual(api.markReadCalls.count, 0, "should not POST when row is already read")
+    }
+
+    func testMarkReadIgnoresUnknownId() async {
+        let api = MockNotifyAPI()
+        api.pages = [InboxPage(items: [sample("home", offsetSeconds: 0)], continuationToken: nil)]
+
+        let vm = InboxViewModel(api: api)
+        await vm.load()
+        await vm.markRead(id: "no-such-id")
+
+        XCTAssertEqual(api.markReadCalls.count, 0)
+    }
+
+    func testDeleteRemovesLocalAndCallsAPI() async {
+        let api = MockNotifyAPI()
+        let target = sample("home", offsetSeconds: 0)
+        let other = sample("other", offsetSeconds: 1)
+        api.pages = [InboxPage(items: [target, other], continuationToken: nil)]
+
+        let vm = InboxViewModel(api: api)
+        await vm.load()
+        await vm.delete(id: target.id)
+
+        guard case .loaded(let items, _) = vm.state else {
+            return XCTFail("Expected .loaded, got \(vm.state)")
+        }
+        XCTAssertEqual(items.map(\.id), [other.id])
+        XCTAssertEqual(api.deleteCalls, [InboxItemCall(id: target.id, source: "home")])
+    }
+
+    func testDeleteFailureStillRemovesLocally() async {
+        let api = MockNotifyAPI()
+        let item = sample("home", offsetSeconds: 0)
+        api.pages = [InboxPage(items: [item], continuationToken: nil)]
+        api.mutationError = NotifyAPIError.http(status: 500, body: "boom")
+
+        let vm = InboxViewModel(api: api)
+        await vm.load()
+        await vm.delete(id: item.id)
+
+        // Best-effort: optimistic remove sticks even on API failure; the next
+        // refresh will reconcile against the server's soft-delete filter.
+        guard case .loaded(let items, _) = vm.state else {
+            return XCTFail("Expected .loaded, got \(vm.state)")
+        }
+        XCTAssertTrue(items.isEmpty)
+    }
 }
