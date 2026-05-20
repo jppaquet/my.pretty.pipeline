@@ -1,0 +1,99 @@
+name: cd-cloudflare
+
+# Applies the Terraform layer under infra/cloudflare/. Manages DNS records
+# (CNAME + asuid TXT for the Function App custom domain, MX + SPF for
+# Email Routing) and the routing rule that binds alerts@<domain> to the
+# email-ingest Worker.
+#
+# Depends on cd-worker.yml having run at least once before — the Email
+# Routing rule references the Worker by name and CF rejects the rule
+# create if the Worker doesn't exist. We don't model that here as a
+# strict `needs:` because the two paths trigger from different file
+# globs; on first bootstrap the maintainer should run cd-worker first
+# via workflow_dispatch (documented in docs/FORK-SETUP.md §9).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'infra/cloudflare/**'
+      - '.github/workflows/cd-cloudflare.yml'
+  workflow_dispatch:
+
+permissions:
+  id-token: write   # OIDC to Azure for the AzureRM TF backend
+  contents: read
+
+concurrency:
+  group: cd-cloudflare-dev
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  # AzureRM provider in TF backend mode picks these up automatically
+  # from the GH OIDC token + the env vars we set in the job.
+  ARM_USE_OIDC: "true"
+  ARM_CLIENT_ID:       ${{ vars.AZURE_CLIENT_ID }}
+  ARM_TENANT_ID:       ${{ vars.AZURE_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: 1.9.8
+          terraform_wrapper: false
+
+      - name: Azure login (OIDC) — used to resolve outputs that flow into TF vars
+        uses: azure/login@2dd0bbf4064d5a1812889dc200bb8eed2597f82a # v3.0.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve runtime inputs from Azure
+        id: azure_outputs
+        run: |
+          set -eo pipefail
+          RG='${{ vars.AZURE_RG_DEV }}'
+          # Salted storage account hosting the tfstate container.
+          STG=$(az storage account list -g "$RG" --query "[0].name" -o tsv)
+          # Function App default hostname + customDomainVerificationId
+          # for the asuid TXT.
+          FN=$(az functionapp list -g "$RG" --query "[0].name" -o tsv)
+          HOST=$(az functionapp show -g "$RG" -n "$FN" --query defaultHostName -o tsv)
+          ASUID=$(az functionapp show -g "$RG" -n "$FN" --query properties.customDomainVerificationId -o tsv)
+          echo "::add-mask::$ASUID"
+          {
+            echo "storage_account=$STG"
+            echo "function_hostname=$HOST"
+            echo "function_asuid=$ASUID"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: terraform init
+        working-directory: infra/cloudflare
+        run: |
+          terraform init \
+            -backend-config="resource_group_name=${{ vars.AZURE_RG_DEV }}" \
+            -backend-config="storage_account_name=${{ steps.azure_outputs.outputs.storage_account }}" \
+            -backend-config="container_name=tfstate" \
+            -backend-config="key=cloudflare.tfstate"
+
+      - name: terraform validate
+        working-directory: infra/cloudflare
+        run: terraform validate
+
+      - name: terraform apply
+        working-directory: infra/cloudflare
+        env:
+          TF_VAR_domain:                                       ${{ vars.NOTIFY_DOMAIN }}
+          TF_VAR_cloudflare_account_id:                        ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          TF_VAR_cloudflare_api_token:                         ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          TF_VAR_function_app_hostname:                        ${{ steps.azure_outputs.outputs.function_hostname }}
+          TF_VAR_function_app_custom_domain_verification_id:   ${{ steps.azure_outputs.outputs.function_asuid }}
+          TF_VAR_email_destination_address:                    ${{ vars.NOTIFY_EMAIL_DESTINATION }}
+        run: terraform apply -auto-approve -input=false

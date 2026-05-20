@@ -463,15 +463,102 @@ The wire format is **CloudEvents 1.0**; structured, binary, and batch modes
 are all accepted. See [SCHEMA.md](SCHEMA.md) for the full attribute table
 and curl recipes for each mode.
 
+## 11. Email ingestion (optional — Google Alerts / forwarding)
+
+Lets producers that can only emit email (e.g. Google Alerts, Gmail
+filter-forwards) land messages in the pipeline. The transport is a
+Cloudflare Worker — inbound emails to `alerts@<your-domain>` are
+classified, transformed to `notify.created.v1` CloudEvents, and POSTed
+to `/v1/notifications` like any other producer.
+
+Pre-reqs that go beyond the base setup:
+
+- A custom domain on Cloudflare DNS (Cloudflare Registrar is the easiest
+  path — same nameservers as the registrar, nothing to migrate).
+- Three GitHub repo variables: `NOTIFY_DOMAIN`, `NOTIFY_EMAIL_DESTINATION`.
+- Two GitHub repo secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`.
+
+### 11a. Buy the domain + mint a CF API token
+
+1. Cloudflare dashboard → Domain Registration → Register Domains. Buy
+   the name. Nameservers are auto-configured on CF.
+2. Dashboard → My Profile → API Tokens → Create Custom Token. Permissions:
+   - Account scope: **Email Routing Addresses:Edit**, **Workers Scripts:Edit**
+   - Zone scope (your zone): **Zone:Read**, **DNS:Edit**, **Email Routing:Edit**
+3. Copy the token + your Account ID (right panel of the zone dashboard).
+4. Push them:
+   ```sh
+   gh secret set CLOUDFLARE_API_TOKEN
+   gh secret set CLOUDFLARE_ACCOUNT_ID
+   gh variable set NOTIFY_DOMAIN --body '<your-domain>'
+   gh variable set NOTIFY_EMAIL_DESTINATION --body '<your-verified-destination>'
+   ```
+
+### 11b. Bootstrap order (one shot, then everything is idempotent)
+
+The first deploy has a strict ordering because the Email Routing rule
+references the Worker by name, the Worker needs the Function App URL,
+and the Bicep custom-domain cert needs the DNS records live first.
+After bootstrap, each workflow runs independently on its own paths.
+
+1. **cd-deploy** (already wired in step 5) — re-run to provision the
+   `tfstate` container in the storage account if you bootstrapped your
+   RG before this section landed.
+2. **cd-worker** — `gh workflow run cd-worker.yml`. Deploys the Worker
+   to Cloudflare so the next step's routing rule has something to bind to.
+3. **cd-cloudflare** — `gh workflow run cd-cloudflare.yml`. Applies the
+   Terraform stack: DNS records, MX + SPF for Email Routing, the routing
+   rule (alerts@<domain> → Worker), and registers your destination
+   address. Cloudflare emails the destination a one-click verification
+   link — click it before the next step.
+
+   > **Manual one-time:** if the first apply fails with something like
+   > "email routing is not enabled for this zone," click **Email →
+   > Email Routing → Get Started** once in the CF dashboard. The
+   > Terraform provider v5 marks the `enabled` toggle as read-only, so
+   > the initial flip is dashboard-only. Re-run the workflow after.
+4. **cd-deploy with `customDomain` set** — push a commit that adds
+   `customDomain=func.<your-domain>` to the cd-deploy Bicep params (or
+   set it as a repo variable and reference it from the workflow). The
+   first run creates the hostname binding and issues the managed cert
+   in `Issuing` state. Wait ~5 min, verify with:
+   ```sh
+   az functionapp show -g rg-notify-dev -n <fname> \
+     --query "hostNameSslStates[?name=='func.<your-domain>']"
+   ```
+5. **cd-deploy again with `enableCustomDomainSsl=true`** — flips the
+   binding to SslState=SniEnabled + binds the issued cert.
+
+### 11c. Producer key + Google Alert
+
+1. Register a producer project named `google-alerts` via the admin SPA
+   or the admin API (see step 9). Mint a key.
+2. Store the key as a Worker secret (the Worker code reads
+   `env.INGEST_API_KEY`):
+   ```sh
+   cd workers/email-ingest
+   npx wrangler secret put INGEST_API_KEY
+   # Paste the npk_* value when prompted; it never appears in shell history.
+   ```
+3. Create the Google Alert at <https://www.google.com/alerts>. Set the
+   "Deliver to" address to `alerts@<your-domain>`. Google sends a
+   one-click verification email → the Worker detects it as a
+   verification (subject prefix `Google Alerts:`) and forwards it to
+   `NOTIFY_EMAIL_DESTINATION`. Click the link from your real inbox.
+4. From then on, every Google Alerts data email (subject prefix
+   `Google Alert -`) becomes a notification on your iOS device.
+
 ## Where things live
 
 ```
-infra/                      → IaC (bicep)
+infra/                      → IaC (bicep + terraform)
   main.bicep                → cd-deploy entry point
   modules/github-oidc.bicep → bootstrap-only (step 3)
+  cloudflare/               → Terraform — DNS + Email Routing (step 11)
 src/                        → backend (.NET 10 Azure Functions)
 app/                        → iOS app (Xcode project, source of truth)
-.github/workflows/          → CI + cd-deploy
+workers/email-ingest/       → Cloudflare Worker — inbound email adapter (step 11)
+.github/workflows/          → CI + cd-deploy + cd-cloudflare + cd-worker
 docs/
   FORK-SETUP.md             → this doc
   DEPLOY.md                 → day-2 ops

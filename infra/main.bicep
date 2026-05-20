@@ -36,6 +36,12 @@ param adminEntraTenantId string = ''
 @description('Entra ID app registration `appId` (client id) for the admin app. Audience the admin JWT middleware enforces. Empty = admin plane disabled. Pair with `adminEntraTenantId`.')
 param adminEntraAudience string = ''
 
+@description('Custom domain bound to the Function App (e.g. func.prettynotifier.com). Empty = no binding. The matching CNAME + asuid TXT records must exist in DNS (managed by infra/cloudflare/) before this template can attach the hostname.')
+param customDomain string = ''
+
+@description('Two-pass toggle for the App Service Managed Certificate. First deploy: false (creates the binding + issues the cert). Second deploy after cert reaches `Ready` (~5 min): true (re-binds the hostname with SslState=SniEnabled). Threaded into `functions.bicep`.')
+param enableCustomDomainSsl bool = false
+
 var namePrefix = 'notify'
 var tags = {
   project: 'my.pipeline'
@@ -152,6 +158,8 @@ module functions 'modules/functions.bicep' = {
     adminEntraTenantId: adminEntraTenantId
     adminEntraAudience: adminEntraAudience
     adminAllowedOrigin: adminSwa.outputs.origin
+    customDomain: customDomain
+    enableCustomDomainSsl: enableCustomDomainSsl
   }
 }
 
@@ -180,3 +188,6 @@ output functionAppName string = functions.outputs.functionAppName
 output functionAppHostname string = functions.outputs.defaultHostname
 output adminSwaName string = adminSwa.outputs.name
 output adminSwaHostname string = adminSwa.outputs.hostname
+// ── outputs consumed by cd-cloudflare.yml (Terraform AzureRM backend) ──
+output tfStateStorageAccountName string = functions.outputs.storageAccountName
+output tfStateContainerName string = functions.outputs.tfStateContainerName

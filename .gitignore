@@ -50,6 +50,24 @@ fastlane/test_output/
 !.env.example
 my.pretty.pipeline.code-workspace
 
+# ── Terraform (Cloudflare layer) ─────────────────────────────────
+# State lives in Azure Storage via the AzureRM backend; only the local
+# `.terraform/` cache + any ad-hoc `*.tfvars` should be ignored. A
+# checked-in `*.tfvars.example` is fine — it has placeholders only.
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.backup
+*.tfvars
+!*.tfvars.example
+crash.log
+
+# ── Cloudflare Workers ───────────────────────────────────────────
+# wrangler stashes deploy state + local dev caches under `.wrangler/`.
+workers/**/.wrangler/
+workers/**/dist/
+workers/**/node_modules/
+
 # ── Local scratch (per-machine notes; never commit) ───────────────
 todo.md
 notes.md
