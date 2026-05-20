@@ -12,7 +12,9 @@ public class SessionTokenTests
 {
     private const string Audience = "my.pretty.pipeline";
     private const string Issuer = "notify";
-    private const string SigningKey = "test-signing-key-with-at-least-32-bytes-of-entropy-padding";
+    // Deterministic 33-byte fixture — long enough to clear the issuer's
+    // ≥ 32-byte length check, low enough entropy that gitleaks ignores it.
+    private const string SigningKey = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"; // gitleaks:allow
 
     [Fact]
     public void Round_trip_returns_user_with_sub()
@@ -61,7 +63,7 @@ public class SessionTokenTests
     [Fact]
     public void Token_signed_with_different_key_is_rejected()
     {
-        var minted = MakeOptions(signingKey: "issuer-key-with-at-least-32-bytes-padding-for-hmac-sha256");
+        var minted = MakeOptions(signingKey: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"); // gitleaks:allow
         var trusted = MakeOptions(signingKey: SigningKey);
         var issued = new SessionTokenIssuer(minted).Issue("u");
 
