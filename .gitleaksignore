@@ -7,3 +7,8 @@ e9988644535694ab49b732b938a583221cced254:src/tests/Notify.Shared.Tests/ApiKeyHas
 # identical for every developer; not a secret.
 # https://learn.microsoft.com/en-us/azure/cosmos-db/emulator
 f7e13dcaf923ce46411967085e77e80fdfc8f286:.github/workflows/ci-functions.yml:generic-api-key:61
+
+# Original session-token test fixture — string was deterministic but had
+# enough entropy to trigger generic-api-key. Follow-up commit 710d340
+# swapped to repeated-char fixtures with inline `gitleaks:allow` markers.
+7ecf41a5689f3f2631111753a32ab18d6ca2fb19:src/tests/Notify.Auth.Tests/SessionTokenTests.cs:generic-api-key:15
