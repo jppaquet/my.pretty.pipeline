@@ -329,11 +329,14 @@ resource hostnameBindingSsl 'Microsoft.Web/sites/hostNameBindings@2023-12-01' = 
     customHostNameDnsRecordType: 'CName'
     hostNameType: 'Verified'
     sslState: 'SniEnabled'
-    thumbprint: managedCert.properties.thumbprint
+    // `managedCert!` force-unwraps the optional: this resource only
+    // deploys when enableCustomDomainSsl is true, by which time the
+    // operator has already run a previous deploy that created the cert
+    // (without it BCP318 — "value may be null at deploy start").
+    // Bicep auto-deduces the dependency from this reference, so no
+    // `dependsOn` block needed.
+    thumbprint: managedCert!.properties.thumbprint
   }
-  dependsOn: [
-    managedCert
-  ]
 }
 
 output functionAppName string = functionApp.name
