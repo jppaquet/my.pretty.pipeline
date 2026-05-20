@@ -15,6 +15,9 @@ struct InboxNotification: Identifiable, Codable, Hashable {
     let deduplicationKey: String?
     let timestamp: Date
     let envelopeId: String
+    // Free-form producer-supplied JSON. We only surface the keys iOS knows
+    // about (`fullBody`) — anything else is ignored at decode time.
+    let metadata: InboxMetadata?
 
     // Per-recipient mutation state. Optional so docs written before these
     // fields existed still decode (nil treated as false / unread / not
@@ -24,6 +27,33 @@ struct InboxNotification: Identifiable, Codable, Hashable {
     // or DELETE /v1/inbox/{id}.
     var isRead: Bool?
     var isHidden: Bool?
+
+    // The detail view's preferred rendering source. Producers whose body
+    // exceeds the 2000-char ingestion cap put the long-form content in
+    // `metadata.fullBody`; everything else falls back to the regular `body`
+    // (which still drives the push banner + inbox row preview).
+    var renderedBody: String { metadata?.fullBody ?? body }
+}
+
+// Lean projection of the server-side `metadata` object — only the keys the
+// iOS app understands. Unknown keys are dropped silently; a typed value
+// mismatch on `fullBody` (e.g. a producer sends a number) also degrades to
+// nil instead of failing the whole inbox decode.
+struct InboxMetadata: Codable, Hashable {
+    let fullBody: String?
+
+    init(fullBody: String? = nil) {
+        self.fullBody = fullBody
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.fullBody = try? container.decodeIfPresent(String.self, forKey: .fullBody)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case fullBody
+    }
 }
 
 enum Priority: String, Codable, Hashable {
@@ -43,6 +73,7 @@ extension InboxNotification {
         deduplicationKey: String? = nil,
         timestamp: Date,
         envelopeId: String? = nil,
+        metadata: InboxMetadata? = nil,
         isRead: Bool? = nil,
         isHidden: Bool? = nil
     ) -> InboxNotification {
@@ -51,6 +82,7 @@ extension InboxNotification {
             type: type, priority: priority, tags: tags,
             deeplink: deeplink, deduplicationKey: deduplicationKey,
             timestamp: timestamp, envelopeId: envelopeId ?? "env-\(id)",
+            metadata: metadata,
             isRead: isRead, isHidden: isHidden
         )
     }

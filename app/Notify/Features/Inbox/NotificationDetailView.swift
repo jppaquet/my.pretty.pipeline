@@ -25,7 +25,12 @@ struct NotificationDetailView: View {
                 // the `presentationIntent` attribute, which Text
                 // ignores — every `\n\n` disappeared visually. The
                 // block-level renderer is what restores layout.
-                MarkdownView(markdown: notification.body)
+                // Prefer the producer-supplied long-form content
+                // (`metadata.fullBody`, no 2000-char cap) when present;
+                // otherwise fall back to the standard `body`. The push
+                // banner + inbox row preview still use `body` — they
+                // don't have room for a digest anyway.
+                MarkdownView(markdown: notification.renderedBody)
                     .font(.body)
 
                 if let deeplink = notification.deeplink {

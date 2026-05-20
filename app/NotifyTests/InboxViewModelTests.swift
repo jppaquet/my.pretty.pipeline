@@ -15,7 +15,8 @@ final class InboxViewModelTests: XCTestCase {
             deeplink: nil,
             deduplicationKey: nil,
             timestamp: Date(timeIntervalSince1970: 1_700_000_000 + TimeInterval(offsetSeconds)),
-            envelopeId: UUID().uuidString
+            envelopeId: UUID().uuidString,
+            metadata: nil
         )
     }
 
