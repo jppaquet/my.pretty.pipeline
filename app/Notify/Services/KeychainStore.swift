@@ -12,16 +12,16 @@ protocol KeychainStoring {
 
 enum KeychainKey {
     static let apnsToken = "apnsToken"
-    // Sign-in-with-Apple identity token (JWT). Sent as
-    // `Authorization: Bearer …` on every backend call once the user is signed
-    // in. The backend's JwtAuthMiddleware (Notify.Functions/Auth) validates
-    // the token against Apple's JWKS and the configured audience claim;
-    // Inbox + RegisterDevice reject the request when this header is absent
-    // or invalid.
-    static let appleIdentityToken = "appleIdentityToken"
+    // Notify-issued session JWT (HS256), minted by `POST /v1/auth/session`
+    // after a Sign-in-with-Apple exchange. Sent as `Authorization: Bearer …`
+    // on every backend call. Apple's own identity token is short-lived
+    // (~10 min) so we never store it — it lives only on the stack during
+    // the exchange. Default session lifetime is 30 days; backend's
+    // `JwtAuthMiddleware` verifies signature, issuer, audience, and expiry.
+    static let sessionToken = "sessionToken"
     // Apple's stable per-app user identifier (the JWT `sub` claim). Captured
-    // alongside the token so we have a durable display handle even after the
-    // token expires.
+    // alongside the session so we have a durable display handle that
+    // outlives the session token.
     static let appleUserIdentifier = "appleUserIdentifier"
 }
 
@@ -52,7 +52,7 @@ final class KeychainStore: KeychainStoring {
             kSecValueData as String: data,
             // ThisDeviceOnly so the item is excluded from encrypted iTunes/
             // Finder backups and never migrates to a restored device — keeps
-            // the function key and the Apple identity token off-device only.
+            // the session token off-device only.
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
         ]
 

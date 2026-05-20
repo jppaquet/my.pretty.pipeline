@@ -136,6 +136,12 @@ var host = new HostBuilder()
         services.AddMemoryCache();
         services.AddHttpClient<IAppleJwksProvider, AppleJwksProvider>();
         services.AddSingleton<AppleJwtValidator>();
+        // Session JWT minting + validation. Apple tokens are exchanged once
+        // at /v1/auth/session; every other protected route accepts only the
+        // session JWT, signed with the KV-backed `Auth__SessionSigningKey`.
+        services.AddSingleton<SessionTokenIssuer>();
+        services.AddSingleton<SessionTokenValidator>();
+        services.AddSingleton<AuthFunctions>();
         // Allowlist gate. When `Auth__CosmosAllowedUsersContainer` is unset we
         // bind the no-op implementation so forks that haven't deployed the
         // bicep change yet still authenticate (any valid SiwA JWT goes

@@ -205,6 +205,23 @@ Function App resolves this via `@Microsoft.KeyVault(...)`; it'll pick up
 the new secret on its next cold start (or restart it: `az functionapp
 restart -g "$RG" -n <function-app-name>`).
 
+## 8. Create the `session-signing-key` KV secret (one-shot)
+
+The iOS app trades its short-lived Apple identity token (~10 min) at
+`POST /v1/auth/session` for a Notify session JWT (30 days). That session
+JWT is HS256-signed with `session-signing-key`. Same out-of-band pattern as
+the pepper:
+
+```sh
+KV=$(az keyvault list -g "$RG" --query "[0].name" -o tsv)
+SECRET=$(openssl rand -base64 48 | tr -d '\n')
+az keyvault secret set --vault-name "$KV" --name session-signing-key --value "$SECRET" >/dev/null
+echo "session signing key stored — rotating it logs every user out"
+```
+
+The issuer rejects keys shorter than 32 bytes; `openssl rand -base64 48`
+yields ~64 chars / 384 bits, well above that floor.
+
 ### Optional: enable the admin plane (web app at `<swa>.azurestaticapps.net`)
 
 The admin web app lives in [`admin/`](../admin/). It's a vanilla-JS SPA hosted on

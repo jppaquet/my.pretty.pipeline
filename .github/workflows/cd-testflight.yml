@@ -55,9 +55,11 @@ jobs:
       # PR-C retired the legacy `NotifyFunctionKey` plist injection — the iOS
       # bundle no longer carries a backend credential. Auth is Sign-in-with-
       # Apple end-to-end: the user signs in on first launch, the identity
-      # token (JWT) lands in the Keychain, and every backend call goes out
-      # with `Authorization: Bearer …`. The Function App's JwtAuthMiddleware
-      # validates against Apple's JWKS server-side. Nothing to inject here.
+      # token is exchanged at /v1/auth/session for a 30-day Notify session
+      # JWT, and every other backend call goes out with `Authorization:
+      # Bearer <session JWT>`. The Function App's JwtAuthMiddleware validates
+      # the session signature against the KV-backed signing key. Nothing to
+      # inject here.
 
       - name: Archive
         run: |

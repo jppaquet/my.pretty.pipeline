@@ -8,8 +8,9 @@ using Microsoft.Extensions.Logging;
 namespace Notify.Functions.Auth;
 
 // Worker middleware that runs on every function invocation. For HTTP requests
-// it looks for an `Authorization: Bearer …` header; if present, validates the
-// JWT through AppleJwtValidator and consults IAllowlistRepository:
+// it looks for an `Authorization: Bearer …` header; if present, validates it
+// as a Notify session JWT (`SessionTokenValidator`) and consults
+// `IAllowlistRepository`:
 //   - Absent header     → pass through (function-key gate handles it)
 //   - Present + invalid → 401, don't invoke the handler
 //   - Present + valid + approved
@@ -22,6 +23,11 @@ namespace Notify.Functions.Auth;
 //
 // When AuthOptions.CosmosAllowedUsersContainer is unset, Program.cs binds the
 // AlwaysApproveAllowlistRepository — preserves pre-allowlist behavior.
+//
+// `/v1/auth/session` (Apple→session exchange) and `/v1/admin/*` (Entra) are
+// bypassed: both have their own validation flows that don't fit this gate.
+// Apple identity tokens are NEVER accepted on protected routes — they're only
+// validated inside the session-exchange handler.
 //
 // Non-HTTP invocations (EventGrid triggers for Archive/Push) are a no-op.
 public sealed class JwtAuthMiddleware : IFunctionsWorkerMiddleware
@@ -44,13 +50,12 @@ public sealed class JwtAuthMiddleware : IFunctionsWorkerMiddleware
             return;
         }
 
-        // /v1/admin/* requests carry Entra tokens, not Apple. AdminAuthMiddleware
-        // owns that path; this middleware passes through without trying to
-        // validate the Bearer header as a Sign-in-with-Apple JWT (which would
-        // 401 every legitimate admin request). Path matches the route prefix
-        // declared on AdminAuthMiddleware — kept under /v1/admin/ rather than
-        // bare /admin/ because the host reserves /admin/* for its own API.
-        if (http.Url.AbsolutePath.StartsWith("/v1/admin/", StringComparison.OrdinalIgnoreCase))
+        // /v1/admin/* requests carry Entra tokens, not session JWTs.
+        // AdminAuthMiddleware owns that path. /v1/auth/session validates the
+        // Apple identity token in its own handler. Both bypass this gate.
+        var path = http.Url.AbsolutePath;
+        if (path.StartsWith("/v1/admin/", StringComparison.OrdinalIgnoreCase)
+            || path.Equals("/v1/auth/session", StringComparison.OrdinalIgnoreCase))
         {
             await next(context);
             return;
@@ -62,8 +67,8 @@ public sealed class JwtAuthMiddleware : IFunctionsWorkerMiddleware
             return;
         }
 
-        var validator = context.InstanceServices.GetRequiredService<AppleJwtValidator>();
-        var user = await validator.ValidateAsync(token, context.CancellationToken);
+        var validator = context.InstanceServices.GetRequiredService<SessionTokenValidator>();
+        var user = validator.Validate(token);
         if (user is null)
         {
             _logger.LogWarning("rejected request with invalid Bearer token on {Function}", context.FunctionDefinition.Name);
