@@ -33,6 +33,37 @@ final class NotifyAPICodableTests: XCTestCase {
           "deduplicationKey": null,
           "timestamp": "2026-04-28T15:00:00Z",
           "envelopeId": "env-2"
+        },
+        {
+          "id": "digest-1",
+          "source": "Watchtower",
+          "title": "Daily Digest",
+          "body": "Short summary (push banner + inbox row)",
+          "type": "info",
+          "priority": "normal",
+          "tags": null,
+          "deeplink": null,
+          "deduplicationKey": null,
+          "timestamp": "2026-05-20T08:00:00Z",
+          "envelopeId": "env-3",
+          "metadata": {
+            "host": "agent-04",
+            "fullBody": "## Full digest\n\nMuch longer markdown content that exceeds the 2000-char body cap."
+          }
+        },
+        {
+          "id": "bad-metadata-1",
+          "source": "weird-bot",
+          "title": "Garbled metadata",
+          "body": "the body itself is fine",
+          "type": "info",
+          "priority": "normal",
+          "tags": null,
+          "deeplink": null,
+          "deduplicationKey": null,
+          "timestamp": "2026-05-20T09:00:00Z",
+          "envelopeId": "env-4",
+          "metadata": { "fullBody": 42 }
         }
       ],
       "continuationToken": "page2"
@@ -43,7 +74,7 @@ final class NotifyAPICodableTests: XCTestCase {
         let data = Data(inboxResponseJSON.utf8)
         let page = try NotifyAPIClient.decoder.decode(InboxPage.self, from: data)
 
-        XCTAssertEqual(page.items.count, 2)
+        XCTAssertEqual(page.items.count, 4)
         XCTAssertEqual(page.continuationToken, "page2")
 
         let first = page.items[0]
@@ -55,12 +86,29 @@ final class NotifyAPICodableTests: XCTestCase {
         XCTAssertEqual(first.deeplink?.absoluteString, "https://example.com/run/42")
         XCTAssertEqual(first.deduplicationKey, "backup-2026-04-28")
         XCTAssertEqual(first.envelopeId, "env-1")
+        XCTAssertNil(first.metadata)
+        // Without metadata.fullBody, renderedBody falls back to body.
+        XCTAssertEqual(first.renderedBody, first.body)
 
         let second = page.items[1]
         XCTAssertNil(second.tags)
         XCTAssertNil(second.deeplink)
         XCTAssertNil(second.deduplicationKey)
         XCTAssertEqual(second.priority, .normal)
+
+        // Digest: metadata.fullBody present + extra producer keys ignored.
+        let digest = page.items[2]
+        XCTAssertEqual(digest.body, "Short summary (push banner + inbox row)")
+        XCTAssertNotNil(digest.metadata?.fullBody)
+        XCTAssertTrue(digest.renderedBody.contains("Much longer markdown content"))
+        XCTAssertNotEqual(digest.renderedBody, digest.body)
+
+        // Bad-metadata: fullBody value type mismatch (number, not string) →
+        // degrade silently to nil instead of failing the whole inbox decode.
+        let bad = page.items[3]
+        XCTAssertNotNil(bad.metadata)
+        XCTAssertNil(bad.metadata?.fullBody)
+        XCTAssertEqual(bad.renderedBody, bad.body)
     }
 
     func testDeviceRegistrationRoundTripsThroughEncoder() throws {

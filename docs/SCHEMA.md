@@ -44,6 +44,13 @@ the project record before verifying the key.
   "tags": ["pi-01", "backup"],        // optional, ≤10, each ≤64 chars, [A-Za-z0-9._-]; "global" reserved
   "deeplink": "https://...",          // optional, scheme ∈ {https, notify}, ≤2048 chars
   "metadata": { "host": "pi-01" },    // optional, free-form, ≤4 KB serialized
+                                       // Reserved key: `fullBody` (string) —
+                                       // the iOS detail view renders this in
+                                       // place of `body` when present, so
+                                       // producers with long-form content
+                                       // (digests, reports) put the summary
+                                       // in `body` (≤2000) and the full
+                                       // markdown in `metadata.fullBody`.
   "deduplicationKey": "backup-2026-04-28"   // optional; same key within TTL = idempotent
 }
 ```
