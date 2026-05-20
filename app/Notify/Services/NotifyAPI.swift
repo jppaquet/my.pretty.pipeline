@@ -10,10 +10,19 @@
 import Foundation
 
 protocol NotifyAPI {
+    // Exchanges an Apple Sign-in identity token for a Notify session JWT.
+    // Unauthenticated — `applyAuth` is intentionally skipped on this call
+    // since the session token doesn't exist yet.
+    func createSession(appleIdentityToken: String) async throws -> SessionResponse
     func registerDevice(_ registration: DeviceRegistration) async throws -> DeviceRegistrationResponse
     func inbox(source: String?, limit: Int, continuationToken: String?) async throws -> InboxPage
     func markInboxRead(id: String, source: String) async throws
     func deleteInboxItem(id: String, source: String) async throws
+}
+
+struct SessionResponse: Decodable, Equatable {
+    let sessionToken: String
+    let expiresAt: Date
 }
 
 enum NotifyAPIError: Error, Equatable {
@@ -38,6 +47,14 @@ final class NotifyAPIClient: NotifyAPI {
         self.baseURL = baseURL
         self.bearer = bearer
         self.session = session
+    }
+
+    func createSession(appleIdentityToken: String) async throws -> SessionResponse {
+        var request = URLRequest(url: baseURL.appendingPathComponent("v1/auth/session"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "content-type")
+        request.httpBody = try Self.encoder.encode(["identityToken": appleIdentityToken])
+        return try await send(request)
     }
 
     func registerDevice(_ registration: DeviceRegistration) async throws -> DeviceRegistrationResponse {
@@ -185,9 +202,20 @@ final class MockNotifyAPI: NotifyAPI {
     var registerResponse: DeviceRegistrationResponse?
     var registerError: Error?
     var inboxError: Error?
+    var sessionResponse: SessionResponse?
+    var sessionError: Error?
     private(set) var registerCalls: [DeviceRegistration] = []
     private(set) var inboxCalls: [InboxCall] = []
+    private(set) var createSessionCalls: [String] = []
     private var pageCursor = 0
+
+    func createSession(appleIdentityToken: String) async throws -> SessionResponse {
+        createSessionCalls.append(appleIdentityToken)
+        if let sessionError { throw sessionError }
+        return sessionResponse ?? SessionResponse(
+            sessionToken: "mock-session-jwt",
+            expiresAt: Date().addingTimeInterval(30 * 24 * 3600))
+    }
 
     func registerDevice(_ registration: DeviceRegistration) async throws -> DeviceRegistrationResponse {
         registerCalls.append(registration)

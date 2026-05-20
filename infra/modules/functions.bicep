@@ -226,6 +226,14 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
         // Sign-in-with-Apple audience. Double-underscore syntax binds to
         // AuthOptions.AppleAudience via configuration sectioning.
         { name: 'Auth__AppleAudience', value: appleAudience }
+        // Session JWT signing key (HS256). KV-backed; same out-of-band model
+        // as api-key-pepper — written once after bootstrap with
+        //   az keyvault secret set --vault-name $KV --name session-signing-key \
+        //     --value $(openssl rand -base64 48)
+        // Rotating this value invalidates every active session (no per-session
+        // revocation table); users sign back in with Apple. Treat the value as
+        // ≥ 32 bytes of entropy — the issuer rejects shorter keys at startup.
+        { name: 'Auth__SessionSigningKey', value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=session-signing-key)' }
         // Cosmos pointers for the user allowlist. JwtAuthMiddleware does a
         // point-read against `allowedUsers/<sub>` on every authenticated
         // request to gate access; first sign-in self-registers a

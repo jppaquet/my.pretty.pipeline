@@ -35,7 +35,7 @@ final class AppContainer {
         // still runs tests with the stable fixture, not the richer preview set.
         if ProcessInfo.processInfo.arguments.contains("-NotifyUITestMockBackend") {
             let keychain = InMemoryKeychainStore()
-            try? keychain.save("ui-test-stub-jwt", forKey: KeychainKey.appleIdentityToken)
+            try? keychain.save("ui-test-stub-session-jwt", forKey: KeychainKey.sessionToken)
             try? keychain.save("ui-test-stub-user", forKey: KeychainKey.appleUserIdentifier)
             return AppContainer(api: MockNotifyAPI.uiTestSeeded(), keychain: keychain)
         }
@@ -45,7 +45,7 @@ final class AppContainer {
         // than the UI-test fixture — multiple sources, days, priorities.
         #if LOCAL_UI_PREVIEW
         let keychain = InMemoryKeychainStore()
-        try? keychain.save("preview-stub-jwt", forKey: KeychainKey.appleIdentityToken)
+        try? keychain.save("preview-stub-session-jwt", forKey: KeychainKey.sessionToken)
         try? keychain.save("preview-stub-user", forKey: KeychainKey.appleUserIdentifier)
         return AppContainer(api: MockNotifyAPI.previewSeeded(), keychain: keychain)
         #else
@@ -57,9 +57,10 @@ final class AppContainer {
             ?? URL(string: "https://func-notify.invalid")!  // sentinel — always valid literal
         // swiftlint:enable force_unwrapping
 
-        // Resolves the JWT at call time so a sign-in / sign-out mid-session is
-        // picked up by the next request without rebuilding the API client.
-        let bearer: BearerTokenProvider = { keychain.load(forKey: KeychainKey.appleIdentityToken) }
+        // Resolves the session JWT at call time so a sign-in / sign-out
+        // mid-session is picked up by the next request without rebuilding the
+        // API client.
+        let bearer: BearerTokenProvider = { keychain.load(forKey: KeychainKey.sessionToken) }
 
         let api = NotifyAPIClient(baseURL: baseURL, bearer: bearer)
         return AppContainer(api: api, keychain: keychain)

@@ -36,7 +36,7 @@ struct SignInView: View {
                 request.requestedScopes = [.fullName]
                 viewModel.prepareSignIn()
             } onCompletion: { result in
-                viewModel.handleSignIn(result)
+                Task { await viewModel.handleSignIn(result) }
             }
             .frame(maxWidth: .infinity, minHeight: 50)
             .signInWithAppleButtonStyle(.black)
@@ -55,5 +55,5 @@ struct SignInView: View {
 }
 
 #Preview {
-    SignInView(viewModel: AuthViewModel(keychain: InMemoryKeychainStore()))
+    SignInView(viewModel: AuthViewModel(keychain: InMemoryKeychainStore(), api: MockNotifyAPI()))
 }

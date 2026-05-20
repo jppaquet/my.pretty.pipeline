@@ -10,7 +10,7 @@ struct RootView: View {
     init(container: AppContainer) {
         self.container = container
         _inboxViewModel = State(initialValue: InboxViewModel(api: container.api))
-        _authViewModel = State(initialValue: AuthViewModel(keychain: container.keychain))
+        _authViewModel = State(initialValue: AuthViewModel(keychain: container.keychain, api: container.api))
     }
 
     var body: some View {
