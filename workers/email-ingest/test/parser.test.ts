@@ -61,12 +61,20 @@ describe("isAuthenticated", () => {
     expect(isAuthenticated("mx.cloudflare.com; spf=fail; dkim=pass; arc=pass")).toBe(true);
   });
 
-  it("fails when dkim does not pass, regardless of spf/arc", () => {
-    expect(isAuthenticated("mx.cloudflare.com; spf=pass; dkim=fail; arc=pass")).toBe(false);
+  it("passes when dkim passes and dmarc passes even if spf is none and arc is none (forwarding-noreply@google.com)", () => {
+    // Real Cloudflare-observed shape for the Gmail "verify forwarding
+    // address" mail: spf=none (Google's sub-paths don't always SPF),
+    // arc=none (no forwarder), dmarc=pass via DKIM alignment to google.com.
+    expect(isAuthenticated("mx.cloudflare.com; spf=none; dkim=pass; arc=none; dmarc=pass")).toBe(true);
   });
 
-  it("fails when neither spf nor arc passes", () => {
-    expect(isAuthenticated("mx.cloudflare.com; spf=fail; dkim=pass; arc=fail")).toBe(false);
+  it("fails when dkim does not pass, regardless of spf/arc/dmarc", () => {
+    expect(isAuthenticated("mx.cloudflare.com; spf=pass; dkim=fail; arc=pass; dmarc=pass")).toBe(false);
+  });
+
+  it("fails when dkim passes but none of spf/arc/dmarc do", () => {
+    expect(isAuthenticated("mx.cloudflare.com; spf=fail; dkim=pass; arc=fail; dmarc=fail")).toBe(false);
+    expect(isAuthenticated("mx.cloudflare.com; spf=none; dkim=pass; arc=none")).toBe(false);
     expect(isAuthenticated("mx.cloudflare.com; spf=neutral; dkim=pass")).toBe(false);
   });
 
@@ -76,7 +84,7 @@ describe("isAuthenticated", () => {
   });
 
   it("fails when dkim is absent (no implicit pass)", () => {
-    expect(isAuthenticated("mx.cloudflare.com; spf=pass; arc=pass")).toBe(false);
+    expect(isAuthenticated("mx.cloudflare.com; spf=pass; arc=pass; dmarc=pass")).toBe(false);
   });
 });
 
