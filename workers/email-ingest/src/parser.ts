@@ -36,28 +36,34 @@ export function classify(subject: string): Classification {
 
 // Reads the Authentication-Results header CF stamps on inbound mail.
 // We require DKIM=pass unconditionally (the upstream signature on the
-// body must be intact) and at least one of {SPF=pass, ARC=pass}.
+// body must be intact) and at least one of {SPF=pass, ARC=pass,
+// DMARC=pass}.
 //
-// Why not require SPF=pass strict: Gmail filter-forwards rewrite the
-// SMTP envelope so SPF authenticates against Gmail's IP, which isn't
-// in the original sender's SPF record → SPF=fail. The forwarded body
-// is unmodified though, so DKIM stays valid. Gmail stamps an ARC
-// (Authenticated Received Chain) header attesting that DKIM/SPF
-// passed at the receiving hop; trusting ARC closes the gap without
-// turning the gate into "trust any sender claim."
+// Why each axis is acceptable:
+//   - SPF=pass: classic check — sending IP authorized by the From:
+//     domain. Works for direct delivery from senders with proper SPF.
+//   - ARC=pass: Authenticated Received Chain — set by Gmail/Outlook
+//     when filter-forwarding mail. Trust the forwarder's attestation
+//     that DKIM/SPF passed at the original hop.
+//   - DMARC=pass: enforces DKIM- or SPF-alignment with the From:
+//     domain. This is the standard gold-check — observed when
+//     googlealerts/forwarding-noreply emails arrive directly (SPF
+//     comes back as 'none' for some Google sub-paths but DMARC
+//     ratifies via DKIM-alignment to google.com).
 //
 // Hostile-forwarder scenario: an attacker can't strip+reforge a
 // Google Alerts DKIM signature without breaking it (signature covers
-// From + Subject + Body). Even if they get ARC=pass on their own
-// hop, the DKIM check on `google.com` still fails — so we require
-// both axes to land at pass.
+// From + Subject + Body). DKIM=pass on the original signing domain
+// is the load-bearing axis; the others just confirm provenance via
+// different mechanisms.
 export function isAuthenticated(authResults: string | null): boolean {
   if (!authResults) return false;
   const dkim = /\bdkim=([a-z]+)/i.exec(authResults)?.[1]?.toLowerCase();
   const spf = /\bspf=([a-z]+)/i.exec(authResults)?.[1]?.toLowerCase();
   const arc = /\barc=([a-z]+)/i.exec(authResults)?.[1]?.toLowerCase();
+  const dmarc = /\bdmarc=([a-z]+)/i.exec(authResults)?.[1]?.toLowerCase();
   if (dkim !== "pass") return false;
-  return spf === "pass" || arc === "pass";
+  return spf === "pass" || arc === "pass" || dmarc === "pass";
 }
 
 // Builds the NotifyCreatedV1 `data` payload from a parsed Google Alert
