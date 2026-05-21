@@ -97,7 +97,7 @@ jobs:
           npx wrangler deploy \
             --var "INGEST_URL:${{ steps.ingest.outputs.url }}" \
             --var "FORWARD_VERIFICATION_TO:${{ vars.NOTIFY_EMAIL_DESTINATION }}" \
-            --var "ALLOWED_SENDERS:googlealerts-noreply@google.com" \
+            --var "ALLOWED_SENDERS:googlealerts-noreply@google.com,forwarding-noreply@google.com" \
             --var "PRODUCER_ID:${{ vars.NOTIFY_PRODUCER_ID || 'google-alerts' }}"
 
       # Push the producer API key to Worker secrets. The npk_* value lives

@@ -71,7 +71,22 @@ export default {
       return;
     }
 
-    // 4. Classify by subject.
+    // 4. Gmail's `forwarding-noreply@google.com` sends one-shot setup
+    //    mails (subjects vary by locale: "Verify your forwarding
+    //    address", "Confirmation du transfert", ...). The subject
+    //    pattern can't be matched reliably, so any message from this
+    //    sender bypasses the subject classifier and gets forwarded
+    //    straight to the maintainer's Gmail so they can click the
+    //    verification link. ALLOWED_SENDERS has already gated this
+    //    address — anything else with this sender would have been
+    //    rejected at step 3.
+    if (from === "forwarding-noreply@google.com") {
+      console.log("forward gmail-setup mail", { from, subject, to: env.FORWARD_VERIFICATION_TO });
+      await message.forward(env.FORWARD_VERIFICATION_TO);
+      return;
+    }
+
+    // 5. Classify Google Alerts emails by subject.
     const cls = classify(subject);
     if (cls.kind === "drop") {
       console.log("drop", { from, subject, reason: cls.reason });
@@ -79,15 +94,14 @@ export default {
       return;
     }
     if (cls.kind === "verification") {
-      // Kept for legacy direct-delivery path; under the Gmail-forward
-      // model the verification email never reaches the Worker because
-      // it lands at the maintainer's Gmail directly. Harmless either way.
-      console.log("forward verification", { from, subject, to: env.FORWARD_VERIFICATION_TO });
+      // Google Alerts verification (subject `Google Alerts: …`).
+      // Forward to the maintainer's Gmail so they can click the link.
+      console.log("forward google-alerts verification", { from, subject, to: env.FORWARD_VERIFICATION_TO });
       await message.forward(env.FORWARD_VERIFICATION_TO);
       return;
     }
 
-    // 5. Data path — build the payload from the already-parsed MIME, POST to Ingest.
+    // 6. Data path — build the payload from the already-parsed MIME, POST to Ingest.
     const payload = buildPayload(cls.topic, parsed);
     // The Ingest POST can take a couple seconds (KV ref lookup + EG
     // publish). Hand it to ctx.waitUntil so we can return from the
