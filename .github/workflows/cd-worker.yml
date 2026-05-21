@@ -97,4 +97,23 @@ jobs:
           npx wrangler deploy \
             --var "INGEST_URL:${{ steps.ingest.outputs.url }}" \
             --var "FORWARD_VERIFICATION_TO:${{ vars.NOTIFY_EMAIL_DESTINATION }}" \
-            --var "ALLOWED_SENDERS:googlealerts-noreply@google.com"
+            --var "ALLOWED_SENDERS:googlealerts-noreply@google.com" \
+            --var "PRODUCER_ID:${{ vars.NOTIFY_PRODUCER_ID || 'google-alerts' }}"
+
+      # Push the producer API key to Worker secrets. The npk_* value lives
+      # in the GitHub `INGEST_API_KEY` repo secret; we stream it into
+      # wrangler via stdin so it never lands in process args or logs.
+      # Idempotent — wrangler secret put overwrites an existing value.
+      # Skipped when the secret is unset (e.g. first deploy before the
+      # maintainer has minted the producer key via the admin SPA) so the
+      # workflow doesn't fail hard; without the secret the Worker can
+      # still deploy but POST to Ingest will 401 until the secret lands.
+      - name: Push producer API key to Worker secret
+        if: ${{ secrets.INGEST_API_KEY != '' }}
+        working-directory: workers/email-ingest
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          INGEST_API_KEY: ${{ secrets.INGEST_API_KEY }}
+        run: |
+          printf '%s' "$INGEST_API_KEY" | npx wrangler secret put INGEST_API_KEY
