@@ -50,15 +50,23 @@ describe("classify", () => {
 });
 
 describe("isAuthenticated", () => {
-  it("passes when both dkim and spf land at pass", () => {
+  it("passes when dkim and spf both land at pass (direct delivery)", () => {
     expect(isAuthenticated("mx.cloudflare.com; spf=pass; dkim=pass; dmarc=pass")).toBe(true);
   });
 
-  it("fails when dkim is not pass", () => {
-    expect(isAuthenticated("mx.cloudflare.com; spf=pass; dkim=fail")).toBe(false);
+  it("passes when dkim passes and arc passes even if spf fails (Gmail filter-forward)", () => {
+    // Realistic Gmail-forwarded mail: original DKIM intact, SPF fails
+    // because the envelope rewrites through Gmail, ARC stamped by
+    // Gmail attests the original passed at receipt.
+    expect(isAuthenticated("mx.cloudflare.com; spf=fail; dkim=pass; arc=pass")).toBe(true);
   });
 
-  it("fails when spf is not pass", () => {
+  it("fails when dkim does not pass, regardless of spf/arc", () => {
+    expect(isAuthenticated("mx.cloudflare.com; spf=pass; dkim=fail; arc=pass")).toBe(false);
+  });
+
+  it("fails when neither spf nor arc passes", () => {
+    expect(isAuthenticated("mx.cloudflare.com; spf=fail; dkim=pass; arc=fail")).toBe(false);
     expect(isAuthenticated("mx.cloudflare.com; spf=neutral; dkim=pass")).toBe(false);
   });
 
@@ -67,10 +75,8 @@ describe("isAuthenticated", () => {
     expect(isAuthenticated("")).toBe(false);
   });
 
-  it("fails when one of the two is absent", () => {
-    // Some senders won't emit a dkim= component; we treat that as a failure
-    // rather than a pass to avoid widening the trust boundary by accident.
-    expect(isAuthenticated("mx.cloudflare.com; spf=pass")).toBe(false);
+  it("fails when dkim is absent (no implicit pass)", () => {
+    expect(isAuthenticated("mx.cloudflare.com; spf=pass; arc=pass")).toBe(false);
   });
 });
 

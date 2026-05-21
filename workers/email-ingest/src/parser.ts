@@ -34,14 +34,30 @@ export function classify(subject: string): Classification {
   return { kind: "drop", reason: `unrecognized Google Alerts subject: "${trimmed}"` };
 }
 
-// Reads the Authentication-Results header CF stamps on inbound mail and
-// returns true only when BOTH dkim and spf land at "pass". DMARC isn't
-// strictly required for Google Alerts but we check it when present.
+// Reads the Authentication-Results header CF stamps on inbound mail.
+// We require DKIM=pass unconditionally (the upstream signature on the
+// body must be intact) and at least one of {SPF=pass, ARC=pass}.
+//
+// Why not require SPF=pass strict: Gmail filter-forwards rewrite the
+// SMTP envelope so SPF authenticates against Gmail's IP, which isn't
+// in the original sender's SPF record → SPF=fail. The forwarded body
+// is unmodified though, so DKIM stays valid. Gmail stamps an ARC
+// (Authenticated Received Chain) header attesting that DKIM/SPF
+// passed at the receiving hop; trusting ARC closes the gap without
+// turning the gate into "trust any sender claim."
+//
+// Hostile-forwarder scenario: an attacker can't strip+reforge a
+// Google Alerts DKIM signature without breaking it (signature covers
+// From + Subject + Body). Even if they get ARC=pass on their own
+// hop, the DKIM check on `google.com` still fails — so we require
+// both axes to land at pass.
 export function isAuthenticated(authResults: string | null): boolean {
   if (!authResults) return false;
   const dkim = /\bdkim=([a-z]+)/i.exec(authResults)?.[1]?.toLowerCase();
   const spf = /\bspf=([a-z]+)/i.exec(authResults)?.[1]?.toLowerCase();
-  return dkim === "pass" && spf === "pass";
+  const arc = /\barc=([a-z]+)/i.exec(authResults)?.[1]?.toLowerCase();
+  if (dkim !== "pass") return false;
+  return spf === "pass" || arc === "pass";
 }
 
 // Builds the NotifyCreatedV1 `data` payload from a parsed Google Alert

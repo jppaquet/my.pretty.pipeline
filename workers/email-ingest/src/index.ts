@@ -36,25 +36,35 @@ export default {
   async email(message: ForwardableEmailMessage, env: Env, ctx: ExecutionContext): Promise<void> {
     const headers = message.headers;
     const subject = headers.get("subject") ?? "";
-    const from = (message.from ?? "").toLowerCase();
 
-    // 1. DKIM + SPF must both pass. CF stamps Authentication-Results on
-    //    every inbound mail; a missing or partial header = reject.
+    // 1. DKIM (+ SPF or ARC) check — see parser.isAuthenticated.
+    //    CF stamps Authentication-Results on every inbound mail; a
+    //    missing or partial header = reject.
     if (!isAuthenticated(headers.get("authentication-results"))) {
-      message.setReject("Sender authentication (DKIM/SPF) did not pass");
+      message.setReject("Sender authentication (DKIM / SPF or ARC) did not pass");
       return;
     }
 
-    // 2. From whitelist. Configured via ALLOWED_SENDERS so a future
-    //    Gmail-forward use case can drop in without code change.
+    // 2. Parse MIME first so we can check the visible `From:` header.
+    //    Gmail filter-forwards rewrite the SMTP envelope (so
+    //    `message.from` becomes a Gmail bounce address), but the
+    //    `From:` header in the MIME body stays as the original sender.
+    //    DKIM=pass on the original signing domain proves the From:
+    //    header wasn't tampered with.
+    const raw = new Response(message.raw);
+    const arrayBuf = await raw.arrayBuffer();
+    const parsed = await PostalMime.parse(new Uint8Array(arrayBuf));
+    const from = (parsed.from?.address ?? "").toLowerCase();
+
+    // 3. From whitelist. Configured via ALLOWED_SENDERS so a future
+    //    forward use case can drop in without code change.
     const allowed = env.ALLOWED_SENDERS.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
     if (!allowed.includes(from)) {
       message.setReject(`Sender ${from} not in allow-list`);
       return;
     }
 
-    // 3. Classify by subject. We do this BEFORE MIME-parsing the body so
-    //    a malformed body doesn't cost a verification-email forward.
+    // 4. Classify by subject.
     const cls = classify(subject);
     if (cls.kind === "drop") {
       console.log("drop", { from, subject, reason: cls.reason });
@@ -62,16 +72,15 @@ export default {
       return;
     }
     if (cls.kind === "verification") {
+      // Kept for legacy direct-delivery path; under the Gmail-forward
+      // model the verification email never reaches the Worker because
+      // it lands at the maintainer's Gmail directly. Harmless either way.
       console.log("forward verification", { from, subject, to: env.FORWARD_VERIFICATION_TO });
       await message.forward(env.FORWARD_VERIFICATION_TO);
       return;
     }
 
-    // 4. Data path — parse MIME, build the payload, POST to Ingest.
-    const raw = new Response(message.raw);
-    const arrayBuf = await raw.arrayBuffer();
-    const parsed = await PostalMime.parse(new Uint8Array(arrayBuf));
-
+    // 5. Data path — build the payload from the already-parsed MIME, POST to Ingest.
     const payload = buildPayload(cls.topic, parsed);
     // The Ingest POST can take a couple seconds (KV ref lookup + EG
     // publish). Hand it to ctx.waitUntil so we can return from the

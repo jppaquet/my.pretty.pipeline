@@ -548,13 +548,27 @@ After bootstrap, each workflow runs independently on its own paths.
 3. Re-trigger cd-worker (`gh workflow run cd-worker.yml`). It deploys
    the Worker and streams `INGEST_API_KEY` from the GH secret into the
    Worker secret of the same name — no more manual `wrangler secret put`.
-4. Create the Google Alert at <https://www.google.com/alerts>. Set the
-   "Deliver to" address to `alerts@<your-domain>`. Google sends a
-   one-click verification email → the Worker detects it as a
-   verification (subject prefix `Google Alerts:`) and forwards it to
-   `NOTIFY_EMAIL_DESTINATION`. Click the link from your real inbox.
-5. From then on, every Google Alerts data email (subject prefix
-   `Google Alert -`) becomes a notification on your iOS device.
+4. Create the Google Alert at <https://www.google.com/alerts>. Google
+   Alerts only delivers to the signed-in Google account's email since
+   ~2024 (the "Deliver to" dropdown is locked) — so set the delivery
+   address to your own Gmail.
+5. In Gmail, set up a filter that auto-forwards Google-Alerts data
+   emails to `alerts@<your-domain>`:
+   - Gmail Settings → Filters → Create filter
+   - From: `googlealerts-noreply@google.com`
+   - Subject: `Google Alert -` (data emails only; verification emails
+     have subject `Google Alerts:` and stay in your Gmail so you can
+     click their links directly)
+   - Action: Forward to `alerts@<your-domain>` (you'll need to add the
+     destination via Gmail's *Forwarding and POP/IMAP* settings first
+     and click its one-click verification — the Worker forwards that
+     verification email to `NOTIFY_EMAIL_DESTINATION` for the click).
+6. From then on, every Google Alerts data email auto-forwards to the
+   Worker. SPF fails on Gmail forwards (the SMTP envelope rewrites
+   through Gmail's IPs), but the Worker accepts the combination
+   DKIM=pass + ARC=pass (Gmail stamps an Authenticated Received Chain
+   attesting it verified the original sender) — see
+   `workers/email-ingest/src/parser.ts:isAuthenticated`.
 
 ## Where things live
 
