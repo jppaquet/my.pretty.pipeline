@@ -20,15 +20,16 @@ export interface Env {
   INGEST_URL: string;
   FORWARD_VERIFICATION_TO: string;
   ALLOWED_SENDERS: string; // comma-separated list
+  // Project ID registered in Cosmos `projects/<id>`. Ingest looks up the
+  // project by `ce-source` ("urn:notify:<PRODUCER_ID>") before verifying
+  // the key hash — a mismatch returns 401 even with a valid key.
+  PRODUCER_ID: string;
 
-  // Set via `wrangler secret put`:
+  // Set via `wrangler secret put` (or pushed by cd-worker.yml from the
+  // INGEST_API_KEY GH secret):
   INGEST_API_KEY: string;
 }
 
-// The CloudEvents `source` Ingest enforces server-side. We pass it for
-// completeness; the Ingest handler overwrites it from the authenticated
-// project regardless.
-const CE_SOURCE = "urn:notify:google-alerts";
 const CE_TYPE = "notify.created.v1";
 
 export default {
@@ -95,7 +96,7 @@ async function postToIngest(env: Env, data: NotifyData, ctx: { from: string; sub
       "x-api-key": env.INGEST_API_KEY,
       "ce-specversion": "1.0",
       "ce-type": CE_TYPE,
-      "ce-source": CE_SOURCE,
+      "ce-source": `urn:notify:${env.PRODUCER_ID}`,
       "ce-id": id,
       "ce-time": time,
     },

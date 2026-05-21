@@ -532,21 +532,28 @@ After bootstrap, each workflow runs independently on its own paths.
 
 ### 11c. Producer key + Google Alert
 
-1. Register a producer project named `google-alerts` via the admin SPA
-   or the admin API (see step 9). Mint a key.
-2. Store the key as a Worker secret (the Worker code reads
-   `env.INGEST_API_KEY`):
+1. Register a producer project via the admin SPA (or the admin API,
+   see step 9). Mint a key — copy the `npk_*` value from the
+   one-time-display popup.
+2. Push the key + the project ID into GitHub repo state:
    ```sh
-   cd workers/email-ingest
-   npx wrangler secret put INGEST_API_KEY
-   # Paste the npk_* value when prompted; it never appears in shell history.
+   gh secret set INGEST_API_KEY                # paste the npk_* value
+   gh variable set NOTIFY_PRODUCER_ID --body 'google-alerts'
+   #                                                ^ replace with
+   #                                                  whatever you named
+   #                                                  the project in step 1
    ```
-3. Create the Google Alert at <https://www.google.com/alerts>. Set the
+   `NOTIFY_PRODUCER_ID` defaults to `google-alerts` when unset, so you
+   only need to set it explicitly if you used a different name.
+3. Re-trigger cd-worker (`gh workflow run cd-worker.yml`). It deploys
+   the Worker and streams `INGEST_API_KEY` from the GH secret into the
+   Worker secret of the same name — no more manual `wrangler secret put`.
+4. Create the Google Alert at <https://www.google.com/alerts>. Set the
    "Deliver to" address to `alerts@<your-domain>`. Google sends a
    one-click verification email → the Worker detects it as a
    verification (subject prefix `Google Alerts:`) and forwards it to
    `NOTIFY_EMAIL_DESTINATION`. Click the link from your real inbox.
-4. From then on, every Google Alerts data email (subject prefix
+5. From then on, every Google Alerts data email (subject prefix
    `Google Alert -`) becomes a notification on your iOS device.
 
 ## Where things live
