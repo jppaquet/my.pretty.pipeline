@@ -65,8 +65,19 @@ jobs:
           # Function App default hostname + customDomainVerificationId
           # for the asuid TXT.
           FN=$(az functionapp list -g "$RG" --query "[0].name" -o tsv)
-          HOST=$(az functionapp show -g "$RG" -n "$FN" --query defaultHostName -o tsv)
+          # `az functionapp show` nests these under `.properties.*`, unlike
+          # `az functionapp list` which flattens them at the root — undocumented
+          # az CLI inconsistency between `list` and `show`. Querying the wrong
+          # path silently returns null + tsv-prints empty, leading TF to send
+          # `content: ""` to CF and getting a cryptic 400 "Content for CNAME
+          # record is invalid."
+          HOST=$(az functionapp show -g "$RG" -n "$FN" --query properties.defaultHostName -o tsv)
           ASUID=$(az functionapp show -g "$RG" -n "$FN" --query properties.customDomainVerificationId -o tsv)
+          # Fail loud on empty values — TF would otherwise apply with
+          # `content: ""` and CF returns a misleading 400.
+          [ -n "$FN" ]    || { echo "::error::function app not found in $RG"; exit 1; }
+          [ -n "$HOST" ]  || { echo "::error::defaultHostName empty for $FN"; exit 1; }
+          [ -n "$ASUID" ] || { echo "::error::customDomainVerificationId empty for $FN"; exit 1; }
           echo "::add-mask::$ASUID"
           {
             echo "storage_account=$STG"
