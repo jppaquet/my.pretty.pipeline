@@ -46,6 +46,12 @@ param adminAllowedOrigin string = ''
 @description('Resource ID of the user-assigned managed identity the Function App uses at runtime. The same identity gets Cosmos data-plane access in cosmos.bicep; DefaultAzureCredential picks it up automatically when it is the only MI attached.')
 param userAssignedIdentityResourceId string
 
+@description('Custom domain bound to the Function App (e.g. func.prettynotifier.com). Empty = no custom domain, only the salted *.azurewebsites.net hostname is reachable. Requires the matching CNAME + asuid TXT records to exist before this template can bind the hostname; both records live in infra/cloudflare/dns.tf.')
+param customDomain string = ''
+
+@description('Two-pass toggle for the App Service Managed Certificate. Run the first cd-deploy with this `false` to create the hostname binding (sslState=Disabled) + issue the cert in the background; once `az functionapp show … properties.hostNameSslStates` reports the cert as `Ready` (~5 min), re-run cd-deploy with this `true` to bind the cert to the hostname. The single-template circular dep (binding ↔ cert) makes the two-pass unavoidable.')
+param enableCustomDomainSsl bool = false
+
 @description('clientId of the user-assigned managed identity. Exposed to the worker as AZURE_CLIENT_ID so DefaultAzureCredential.ManagedIdentityCredential mints a token for the right identity. Without it, IMDS returns 400 "Identity not found" because no system MI exists to fall back on.')
 param userAssignedIdentityClientId string
 
@@ -62,6 +68,11 @@ var functionAppName = 'func-${namePrefix}-${env}-${take(uniqueString(resourceGro
 // packages from. Created on the same storage account; the Function App's
 // SystemAssigned identity reads from it via AzureWebJobsStorage.
 var deploymentContainerName = 'app-package'
+// Terraform state container — used by `cd-cloudflare.yml` for the AzureRM
+// backend. Shared storage account keeps the resource graph tight (one
+// storage account per env). The MI already has Storage Blob Data Owner at
+// the account scope (see below), so no extra role grant needed for CI.
+var tfStateContainerName = 'tfstate'
 
 resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   name: storageName
@@ -87,6 +98,11 @@ resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
 
     resource deploymentContainer 'containers' = {
       name: deploymentContainerName
+      properties: { publicAccess: 'None' }
+    }
+
+    resource tfStateContainer 'containers' = {
+      name: tfStateContainerName
       properties: { publicAccess: 'None' }
     }
   }
@@ -257,5 +273,74 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
   ]
 }
 
+// ── Custom domain (optional) ──────────────────────────────────────────
+//
+// Bootstrap dance (one-shot, then idempotent):
+//   1. infra/cloudflare/ creates the CNAME `<customDomain>` → defaultHostname
+//      and the `asuid.<customDomain>` TXT carrying customDomainVerificationId
+//      so Azure accepts the hostname-ownership challenge.
+//   2. cd-deploy runs with customDomain=<...> + enableCustomDomainSsl=false:
+//      binds the hostname (sslState=Disabled) and issues the managed cert
+//      (HTTP-01 challenge served by the bound hostname).
+//   3. Maintainer (or a follow-up workflow_dispatch) re-runs cd-deploy with
+//      enableCustomDomainSsl=true once the cert reaches `Ready`. The binding
+//      gets re-deployed with sslState=SniEnabled + the issued thumbprint.
+//
+// Two separate hostNameBindings resources because Bicep can't break the
+// circular dep otherwise (binding needs cert thumbprint; cert needs live
+// binding for HTTP-01). Conditions are mutually exclusive so only one is
+// ever active in a given deploy.
+
+resource hostnameBindingNoSsl 'Microsoft.Web/sites/hostNameBindings@2023-12-01' = if (!empty(customDomain) && !enableCustomDomainSsl) {
+  parent: functionApp
+  name: customDomain
+  properties: {
+    siteName: functionApp.name
+    customHostNameDnsRecordType: 'CName'
+    hostNameType: 'Verified'
+    sslState: 'Disabled'
+  }
+}
+
+resource managedCert 'Microsoft.Web/certificates@2023-12-01' = if (!empty(customDomain)) {
+  name: 'mc-${replace(customDomain, '.', '-')}'
+  location: location
+  tags: tags
+  properties: {
+    canonicalName: customDomain
+    serverFarmId: plan.id
+    // HTTP-01: Azure requests `http://<customDomain>/.well-known/acme-challenge/<token>`
+    // and the binding has to be live for this to reach the right origin.
+    // That's why this resource depends on (implicitly, via the
+    // serverFarmId reference) the binding having been created at least
+    // once already.
+    domainValidationMethod: 'http-01'
+  }
+  dependsOn: [
+    hostnameBindingNoSsl
+  ]
+}
+
+resource hostnameBindingSsl 'Microsoft.Web/sites/hostNameBindings@2023-12-01' = if (!empty(customDomain) && enableCustomDomainSsl) {
+  parent: functionApp
+  name: customDomain
+  properties: {
+    siteName: functionApp.name
+    customHostNameDnsRecordType: 'CName'
+    hostNameType: 'Verified'
+    sslState: 'SniEnabled'
+    // `managedCert!` force-unwraps the optional: this resource only
+    // deploys when enableCustomDomainSsl is true, by which time the
+    // operator has already run a previous deploy that created the cert
+    // (without it BCP318 — "value may be null at deploy start").
+    // Bicep auto-deduces the dependency from this reference, so no
+    // `dependsOn` block needed.
+    thumbprint: managedCert!.properties.thumbprint
+  }
+}
+
 output functionAppName string = functionApp.name
 output defaultHostname string = functionApp.properties.defaultHostName
+output customDomainVerificationId string = functionApp.properties.customDomainVerificationId
+output storageAccountName string = storage.name
+output tfStateContainerName string = tfStateContainerName

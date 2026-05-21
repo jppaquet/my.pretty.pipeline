@@ -1,0 +1,99 @@
+name: cd-worker
+
+# Deploys the email-ingest Cloudflare Worker to production. Runs whenever
+# the Worker source changes on `main`. Authenticated via the Cloudflare
+# API token in repo secrets — no Azure identity needed (Workers + Email
+# Routing live entirely on the CF side).
+#
+# Bootstrap order: this workflow MUST run at least once before
+# cd-cloudflare.yml's first apply, because the Email Routing rule in
+# infra/cloudflare/email-routing.tf references this Worker by name and
+# CF rejects the rule create if the Worker doesn't exist yet. After
+# bootstrap, the two workflows run independently.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'workers/email-ingest/**'
+      - '.github/workflows/cd-worker.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cd-worker-dev
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+
+      # `npm ci` enforces the committed package-lock.json. A drift between
+      # package.json and the lockfile fails the run, which is the supply-
+      # chain guard documented in workers/email-ingest/README.md.
+      - name: Install (deterministic)
+        working-directory: workers/email-ingest
+        run: npm ci
+
+      - name: Type-check
+        working-directory: workers/email-ingest
+        run: npx tsc --noEmit
+
+      - name: Test
+        working-directory: workers/email-ingest
+        run: npm test
+
+      # The Worker doesn't depend on Azure for its bootstrap path, but it
+      # does need to know which Function App to POST to. We resolve the
+      # default hostname dynamically so the deploy stays valid even if the
+      # salted Function App name changes on a future re-bootstrap of the
+      # Azure RG.
+      - name: Azure login (OIDC, read-only lookup)
+        uses: azure/login@2dd0bbf4064d5a1812889dc200bb8eed2597f82a # v3.0.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve Function App ingest URL
+        id: ingest
+        run: |
+          set -eo pipefail
+          # Prefer the custom domain if NOTIFY_DOMAIN is set — otherwise
+          # fall back to the salted *.azurewebsites.net default. The
+          # custom domain only resolves once cd-cloudflare has applied
+          # the DNS records AND the Bicep custom-domain binding is live,
+          # so first-time bootstrap uses the default and subsequent
+          # deploys flip to the prettier hostname.
+          DOMAIN='${{ vars.NOTIFY_DOMAIN }}'
+          if [ -n "$DOMAIN" ]; then
+            URL="https://func.${DOMAIN}/v1/notifications"
+          else
+            HOST=$(az functionapp list -g "${{ vars.AZURE_RG_DEV }}" \
+              --query "[0].defaultHostName" -o tsv)
+            URL="https://${HOST}/v1/notifications"
+          fi
+          echo "url=${URL}" >> "$GITHUB_OUTPUT"
+          echo "Will POST inbound alerts to ${URL}"
+
+      - name: Deploy
+        working-directory: workers/email-ingest
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npx wrangler deploy \
+            --var "INGEST_URL:${{ steps.ingest.outputs.url }}" \
+            --var "FORWARD_VERIFICATION_TO:${{ vars.NOTIFY_EMAIL_DESTINATION }}" \
+            --var "ALLOWED_SENDERS:googlealerts-noreply@google.com"

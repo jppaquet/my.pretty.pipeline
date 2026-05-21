@@ -1,0 +1,121 @@
+// Cloudflare Worker email handler. Routes Google Alerts emails into the
+// Notify pipeline:
+//   - Verification emails → forwarded to the maintainer's verified
+//     destination (CF Email Routing) so the click-link can be actioned
+//     from a real inbox.
+//   - Data emails → wrapped in a CloudEvents 1.0 binary-mode envelope
+//     and POSTed to /v1/notifications with the producer API key.
+//   - Anything else → dropped (logged for observability).
+
+import PostalMime from "postal-mime";
+import {
+  buildPayload,
+  classify,
+  isAuthenticated,
+  type NotifyData,
+} from "./parser";
+
+export interface Env {
+  // Set via `wrangler deploy --var`:
+  INGEST_URL: string;
+  FORWARD_VERIFICATION_TO: string;
+  ALLOWED_SENDERS: string; // comma-separated list
+
+  // Set via `wrangler secret put`:
+  INGEST_API_KEY: string;
+}
+
+// The CloudEvents `source` Ingest enforces server-side. We pass it for
+// completeness; the Ingest handler overwrites it from the authenticated
+// project regardless.
+const CE_SOURCE = "urn:notify:google-alerts";
+const CE_TYPE = "notify.created.v1";
+
+export default {
+  async email(message: ForwardableEmailMessage, env: Env, ctx: ExecutionContext): Promise<void> {
+    const headers = message.headers;
+    const subject = headers.get("subject") ?? "";
+    const from = (message.from ?? "").toLowerCase();
+
+    // 1. DKIM + SPF must both pass. CF stamps Authentication-Results on
+    //    every inbound mail; a missing or partial header = reject.
+    if (!isAuthenticated(headers.get("authentication-results"))) {
+      message.setReject("Sender authentication (DKIM/SPF) did not pass");
+      return;
+    }
+
+    // 2. From whitelist. Configured via ALLOWED_SENDERS so a future
+    //    Gmail-forward use case can drop in without code change.
+    const allowed = env.ALLOWED_SENDERS.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+    if (!allowed.includes(from)) {
+      message.setReject(`Sender ${from} not in allow-list`);
+      return;
+    }
+
+    // 3. Classify by subject. We do this BEFORE MIME-parsing the body so
+    //    a malformed body doesn't cost a verification-email forward.
+    const cls = classify(subject);
+    if (cls.kind === "drop") {
+      console.log("drop", { from, subject, reason: cls.reason });
+      message.setReject(cls.reason);
+      return;
+    }
+    if (cls.kind === "verification") {
+      console.log("forward verification", { from, subject, to: env.FORWARD_VERIFICATION_TO });
+      await message.forward(env.FORWARD_VERIFICATION_TO);
+      return;
+    }
+
+    // 4. Data path — parse MIME, build the payload, POST to Ingest.
+    const raw = new Response(message.raw);
+    const arrayBuf = await raw.arrayBuffer();
+    const parsed = await PostalMime.parse(new Uint8Array(arrayBuf));
+
+    const payload = buildPayload(cls.topic, parsed);
+    // The Ingest POST can take a couple seconds (KV ref lookup + EG
+    // publish). Hand it to ctx.waitUntil so we can return from the
+    // email handler immediately and let Cloudflare ack the SMTP
+    // transaction — failures still surface in `console.error`.
+    ctx.waitUntil(postToIngest(env, payload, { from, subject }));
+  },
+} satisfies ExportedHandler<Env>;
+
+async function postToIngest(env: Env, data: NotifyData, ctx: { from: string; subject: string }): Promise<void> {
+  // Binary-mode CloudEvents (per src/Notify.Functions/Ingestion/CloudEventsParser.cs
+  // TryParseBinary): attributes go in headers, body is plain JSON of the
+  // data payload. Smaller wire format than structured mode, less Worker
+  // CPU to assemble.
+  const id = crypto.randomUUID();
+  const time = new Date().toISOString();
+
+  const resp = await fetch(env.INGEST_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": env.INGEST_API_KEY,
+      "ce-specversion": "1.0",
+      "ce-type": CE_TYPE,
+      "ce-source": CE_SOURCE,
+      "ce-id": id,
+      "ce-time": time,
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => "<unreadable>");
+    // Surface in Workers logs (observability enabled in wrangler.toml).
+    // No retry: a transient Ingest 5xx will retry on the next email; a
+    // 4xx is a producer bug and retrying won't help.
+    console.error("ingest POST failed", {
+      status: resp.status,
+      body: text.slice(0, 400),
+      ceId: id,
+      from: ctx.from,
+      subject: ctx.subject,
+    });
+    return;
+  }
+
+  console.log("ingest POST ok", { status: resp.status, ceId: id, from: ctx.from, subject: ctx.subject });
+}
