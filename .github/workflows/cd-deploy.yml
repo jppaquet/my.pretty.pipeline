@@ -235,8 +235,11 @@ jobs:
           #    `--hostname` add is idempotent: re-runs no-op cleanly
           #    when the binding already exists with the same name.
           echo "Adding hostname $HOST to $FN..."
+          # `az functionapp config hostname add` takes `--name` for the
+          # Function App (not `--webapp-name` — that flag is the
+          # `az webapp ...` family's; az CLI inconsistency).
           az functionapp config hostname add \
-            --resource-group "$RG" --webapp-name "$FN" --hostname "$HOST"
+            --resource-group "$RG" --name "$FN" --hostname "$HOST"
 
           # 2. Issue + bind the App Service Managed Certificate.
           #    `az webapp config ssl create --hostname` does both in
