@@ -187,6 +187,67 @@ jobs:
             adminEntraAudience=${{ vars.ADMIN_AAD_AUDIENCE }}
           failOnStdErr: false
 
+  # Bind func.<NOTIFY_DOMAIN> + issue the App Service Managed Cert. Two
+  # idempotent `az` calls; running them every deploy is cheap and keeps
+  # the binding self-healing if Azure decides to rotate state (the
+  # managed cert renews automatically at ~6-month boundaries — re-binds
+  # automatically too). Skipped entirely when NOTIFY_DOMAIN is unset.
+  #
+  # Prerequisite: cd-cloudflare must have applied the CNAME + asuid TXT
+  # records for `func.<NOTIFY_DOMAIN>` first — otherwise hostname-add
+  # fails the ownership challenge. If DNS isn't ready, we warn and
+  # skip rather than fail the deploy; the user re-runs cd-deploy once
+  # cd-cloudflare has applied.
+  bind-custom-domain:
+    needs: [deploy-infra, publish-functions]
+    if: |
+      success() &&
+      vars.NOTIFY_DOMAIN != '' &&
+      needs.deploy-infra.outputs.function_app_name != ''
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Azure login (OIDC)
+        uses: azure/login@2dd0bbf4064d5a1812889dc200bb8eed2597f82a # v3.0.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Bind hostname + issue managed cert
+        env:
+          RG:   ${{ vars.AZURE_RG_DEV }}
+          FN:   ${{ needs.deploy-infra.outputs.function_app_name }}
+          HOST: func.${{ vars.NOTIFY_DOMAIN }}
+        run: |
+          set -eo pipefail
+          # DNS readiness gate. dig +short returns the resolved record;
+          # an empty string means CF hasn't propagated yet (or
+          # cd-cloudflare hasn't run). Soft-skip with a warning so the
+          # rest of the deploy still completes; the user re-runs once
+          # DNS settles.
+          if [ -z "$(dig +short "$HOST")" ]; then
+            echo "::warning::$HOST does not resolve yet — skipping custom-domain bind. Re-run cd-deploy after cd-cloudflare completes."
+            exit 0
+          fi
+
+          # 1. Hostname binding (Azure validates ownership against the
+          #    asuid.<HOST> TXT record placed by cd-cloudflare). The
+          #    `--hostname` add is idempotent: re-runs no-op cleanly
+          #    when the binding already exists with the same name.
+          echo "Adding hostname $HOST to $FN..."
+          az functionapp config hostname add \
+            --resource-group "$RG" --webapp-name "$FN" --hostname "$HOST"
+
+          # 2. Issue + bind the App Service Managed Certificate.
+          #    `az webapp config ssl create --hostname` does both in
+          #    one shot: it polls the HTTP-01 challenge (~5 min), then
+          #    binds the resulting cert at sslState=SniEnabled.
+          #    Idempotent: returns the existing cert + leaves the bind
+          #    alone when called on a hostname that's already SNI-enabled.
+          echo "Issuing + binding managed cert for $HOST..."
+          az webapp config ssl create \
+            --resource-group "$RG" --name "$FN" --hostname "$HOST"
+
   # Admin SPA upload. Only the `admin/` static content; no backend.
   # Renders config.template.js → config.js with deploy-time values (tenant,
   # client id, api base) before upload so the bundle stays generic in the

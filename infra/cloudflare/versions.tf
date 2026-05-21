@@ -24,6 +24,12 @@ terraform {
     # The remaining fields (resource_group_name, storage_account_name,
     # container_name, key) come from `terraform init -backend-config=…` in
     # the workflow so we don't bake the salted storage name into the file.
-    use_oidc = true
+    use_oidc         = true
+    # The storage account has `allowSharedKeyAccess: false` (see
+    # infra/modules/functions.bicep) so the AzureRM backend can't fall
+    # back to listing keys for blob access. `use_azuread_auth = true`
+    # tells it to use the OIDC-minted AAD token end-to-end — the MI
+    # already has Storage Blob Data Owner at the storage-account scope.
+    use_azuread_auth = true
   }
 }

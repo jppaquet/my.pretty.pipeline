@@ -20,6 +20,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  id-token: write   # OIDC for `azure/login` (read-only lookup of the Function App hostname)
   contents: read
 
 concurrency:
