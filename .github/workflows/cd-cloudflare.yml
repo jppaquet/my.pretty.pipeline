@@ -96,4 +96,9 @@ jobs:
           TF_VAR_function_app_hostname:                        ${{ steps.azure_outputs.outputs.function_hostname }}
           TF_VAR_function_app_custom_domain_verification_id:   ${{ steps.azure_outputs.outputs.function_asuid }}
           TF_VAR_email_destination_address:                    ${{ vars.NOTIFY_EMAIL_DESTINATION }}
+          # Local-part of the email-ingest address. Defaults to 'alerts'
+          # when the repo variable is unset, so most forks don't need to
+          # touch it; override (`gh variable set NOTIFY_EMAIL_LOCAL_PART`)
+          # to use e.g. inbox@<domain> or notify@<domain> instead.
+          TF_VAR_email_ingest_local_part:                      ${{ vars.NOTIFY_EMAIL_LOCAL_PART || 'alerts' }}
         run: terraform apply -auto-approve -input=false
