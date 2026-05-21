@@ -14,14 +14,14 @@
 #     to be verified — provisioning the address sends a confirmation email
 #     to it, and the maintainer must click before the first forward works.
 
-# Email Routing settings — provider v5 marks `enabled` and `skip_wizard`
-# as read-only (the toggle is implicitly on once you have MX records and
-# at least one rule; CF has no separate "off" mode). We declare the
-# resource so it appears in state and gets a clean import path, but the
-# only configurable input is the zone reference.
-resource "cloudflare_email_routing_settings" "this" {
-  zone_id = local.zone_id
-}
+# Email Routing must be enabled manually once via the CF dashboard
+# (see FORK-SETUP §11b). The `cloudflare_email_routing_settings`
+# resource was here originally, but the v5 provider attempts a POST
+# to `/email/routing/enable` on every apply — CF returns 403 once
+# routing is already on, breaking re-applies. The MX + SPF records
+# are auto-managed by CF when routing is enabled. So we manage zero
+# settings-level resources here; the rules + addresses below are
+# the only things TF owns.
 
 # Verified destination — Cloudflare Email Routing forwards land here.
 # Account-scoped (verified destinations are shared across all zones in
@@ -51,8 +51,6 @@ resource "cloudflare_email_routing_rule" "alerts_to_worker" {
     type  = "worker"
     value = [var.email_ingest_worker_name]
   }]
-
-  depends_on = [cloudflare_email_routing_settings.this]
 }
 
 # Catch-all reject. Anything sent to <anything-else>@<domain> bounces
@@ -68,6 +66,4 @@ resource "cloudflare_email_routing_catch_all" "reject_rest" {
   actions = [{
     type = "drop"
   }]
-
-  depends_on = [cloudflare_email_routing_settings.this]
 }

@@ -6,10 +6,13 @@
 #      via the dashboard if WAF/DDoS is desired (no record changes needed).
 #   2. TXT `asuid.func.<domain>` carrying `customDomainVerificationId` —
 #      Azure refuses to bind the hostname until this record resolves.
-#   3. MX records for Cloudflare Email Routing — the three CF inbound
-#      MX hosts plus the SPF TXT, exactly what the CF dashboard adds when
-#      you click "Enable Email Routing." We add them as code so they stay
-#      diff-able.
+#
+# MX + SPF for Cloudflare Email Routing are intentionally NOT here.
+# When the maintainer clicks "Enable Email Routing" in the dashboard
+# (one-shot, see FORK-SETUP §11b), CF auto-creates and auto-manages the
+# 3 MX records (route1/2/3.mx.cloudflare.net) + the SPF TXT — and rejects
+# any TF-side create of identical records with 400 "this zone is managed
+# by Email Routing." Treat them as CF-managed; we don't try to dual-write.
 
 resource "cloudflare_dns_record" "func_cname" {
   zone_id = local.zone_id
@@ -29,49 +32,4 @@ resource "cloudflare_dns_record" "func_asuid_txt" {
   ttl     = 1
   proxied = false
   comment = "Azure App Service hostname-ownership challenge"
-}
-
-# Cloudflare Email Routing inbound MX + SPF. Priorities + hostnames are the
-# CF-managed defaults; same shape the dashboard produces.
-resource "cloudflare_dns_record" "email_mx_route1" {
-  zone_id  = local.zone_id
-  name     = var.domain
-  type     = "MX"
-  content  = "route1.mx.cloudflare.net"
-  priority = 10
-  ttl      = 1
-  proxied  = false
-  comment  = "CF Email Routing"
-}
-
-resource "cloudflare_dns_record" "email_mx_route2" {
-  zone_id  = local.zone_id
-  name     = var.domain
-  type     = "MX"
-  content  = "route2.mx.cloudflare.net"
-  priority = 20
-  ttl      = 1
-  proxied  = false
-  comment  = "CF Email Routing"
-}
-
-resource "cloudflare_dns_record" "email_mx_route3" {
-  zone_id  = local.zone_id
-  name     = var.domain
-  type     = "MX"
-  content  = "route3.mx.cloudflare.net"
-  priority = 30
-  ttl      = 1
-  proxied  = false
-  comment  = "CF Email Routing"
-}
-
-resource "cloudflare_dns_record" "email_spf" {
-  zone_id = local.zone_id
-  name    = var.domain
-  type    = "TXT"
-  content = "\"v=spf1 include:_spf.mx.cloudflare.net ~all\""
-  ttl     = 1
-  proxied = false
-  comment = "CF Email Routing SPF"
 }

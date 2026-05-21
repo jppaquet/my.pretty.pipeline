@@ -512,11 +512,14 @@ After bootstrap, each workflow runs independently on its own paths.
    address. Cloudflare emails the destination a one-click verification
    link — click it before the next step.
 
-   > **Manual one-time:** if the first apply fails with something like
-   > "email routing is not enabled for this zone," click **Email →
-   > Email Routing → Get Started** once in the CF dashboard. The
-   > Terraform provider v5 marks the `enabled` toggle as read-only, so
-   > the initial flip is dashboard-only. Re-run the workflow after.
+   > **Mandatory one-time before this step:** click **Email → Email
+   > Routing → Get Started** in the CF dashboard. The Terraform
+   > provider v5 has no way to flip the enable toggle programmatically
+   > (the API rejects the call once it's on), and CF only auto-creates
+   > the MX + SPF records *after* this click — TF doesn't manage them
+   > because attempting to dual-write the same records returns 400
+   > "this zone is managed by Email Routing." Re-run cd-cloudflare
+   > after clicking.
 4. **cd-deploy** — `gh workflow run cd-deploy.yml`. The `bind-custom-domain`
    job picks up `NOTIFY_DOMAIN` automatically and runs two idempotent
    `az` calls: one to add the hostname binding (validates ownership via
