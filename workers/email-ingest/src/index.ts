@@ -40,7 +40,16 @@ export default {
     // 1. DKIM (+ SPF or ARC) check — see parser.isAuthenticated.
     //    CF stamps Authentication-Results on every inbound mail; a
     //    missing or partial header = reject.
-    if (!isAuthenticated(headers.get("authentication-results"))) {
+    const authResults = headers.get("authentication-results");
+    if (!isAuthenticated(authResults)) {
+      // Log the raw header so `wrangler tail` shows exactly which axis
+      // failed when an email gets rejected — otherwise the bounce
+      // message is the only signal and it's not enough to debug.
+      console.warn("auth fail", {
+        subject,
+        envelopeFrom: message.from,
+        authResults,
+      });
       message.setReject("Sender authentication (DKIM / SPF or ARC) did not pass");
       return;
     }
