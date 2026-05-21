@@ -475,7 +475,7 @@ Pre-reqs that go beyond the base setup:
 
 - A custom domain on Cloudflare DNS (Cloudflare Registrar is the easiest
   path — same nameservers as the registrar, nothing to migrate).
-- Three GitHub repo variables: `NOTIFY_DOMAIN`, `NOTIFY_EMAIL_DESTINATION`.
+- GitHub repo variables: `NOTIFY_DOMAIN`, `NOTIFY_EMAIL_DESTINATION`, and optionally `NOTIFY_EMAIL_LOCAL_PART` (defaults to `alerts`, override if you want a different local-part like `inbox` or `notify`).
 - Two GitHub repo secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`.
 
 ### 11a. Buy the domain + mint a CF API token
@@ -492,6 +492,8 @@ Pre-reqs that go beyond the base setup:
    gh secret set CLOUDFLARE_ACCOUNT_ID
    gh variable set NOTIFY_DOMAIN --body '<your-domain>'
    gh variable set NOTIFY_EMAIL_DESTINATION --body '<your-verified-destination>'
+   # Optional — defaults to `alerts` when unset:
+   # gh variable set NOTIFY_EMAIL_LOCAL_PART --body 'inbox'
    ```
 
 ### 11b. Bootstrap order (one shot, then everything is idempotent)
