@@ -517,17 +517,13 @@ After bootstrap, each workflow runs independently on its own paths.
    > Email Routing → Get Started** once in the CF dashboard. The
    > Terraform provider v5 marks the `enabled` toggle as read-only, so
    > the initial flip is dashboard-only. Re-run the workflow after.
-4. **cd-deploy with `customDomain` set** — push a commit that adds
-   `customDomain=func.<your-domain>` to the cd-deploy Bicep params (or
-   set it as a repo variable and reference it from the workflow). The
-   first run creates the hostname binding and issues the managed cert
-   in `Issuing` state. Wait ~5 min, verify with:
-   ```sh
-   az functionapp show -g rg-notify-dev -n <fname> \
-     --query "hostNameSslStates[?name=='func.<your-domain>']"
-   ```
-5. **cd-deploy again with `enableCustomDomainSsl=true`** — flips the
-   binding to SslState=SniEnabled + binds the issued cert.
+4. **cd-deploy** — `gh workflow run cd-deploy.yml`. The `bind-custom-domain`
+   job picks up `NOTIFY_DOMAIN` automatically and runs two idempotent
+   `az` calls: one to add the hostname binding (validates ownership via
+   the `asuid` TXT record cd-cloudflare just placed), one to issue +
+   bind the App Service Managed Cert (HTTP-01 challenge, ~5 min). If
+   DNS hasn't propagated yet, the job soft-skips with a warning — just
+   re-run cd-deploy a minute later.
 
 ### 11c. Producer key + Google Alert
 
