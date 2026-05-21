@@ -34,36 +34,28 @@ export function classify(subject: string): Classification {
   return { kind: "drop", reason: `unrecognized Google Alerts subject: "${trimmed}"` };
 }
 
-// Reads the Authentication-Results header CF stamps on inbound mail.
-// We require DKIM=pass unconditionally (the upstream signature on the
-// body must be intact) and at least one of {SPF=pass, ARC=pass,
-// DMARC=pass}.
+// CF Email Routing does NOT stamp a standard `Authentication-Results`
+// header on inbound mail (verified empirically by dumping
+// `headers.keys()` on a rejected message — see the `auth fail` log
+// from the bootstrap debugging session). Instead it folds DKIM, SPF,
+// DMARC, and a handful of other signals into a single internal score
+// surfaced as `x-cf-spamh-score`. Score 0 = no spam indicators
+// triggered; higher = more concerning.
 //
-// Why each axis is acceptable:
-//   - SPF=pass: classic check — sending IP authorized by the From:
-//     domain. Works for direct delivery from senders with proper SPF.
-//   - ARC=pass: Authenticated Received Chain — set by Gmail/Outlook
-//     when filter-forwarding mail. Trust the forwarder's attestation
-//     that DKIM/SPF passed at the original hop.
-//   - DMARC=pass: enforces DKIM- or SPF-alignment with the From:
-//     domain. This is the standard gold-check — observed when
-//     googlealerts/forwarding-noreply emails arrive directly (SPF
-//     comes back as 'none' for some Google sub-paths but DMARC
-//     ratifies via DKIM-alignment to google.com).
-//
-// Hostile-forwarder scenario: an attacker can't strip+reforge a
-// Google Alerts DKIM signature without breaking it (signature covers
-// From + Subject + Body). DKIM=pass on the original signing domain
-// is the load-bearing axis; the others just confirm provenance via
-// different mechanisms.
-export function isAuthenticated(authResults: string | null): boolean {
-  if (!authResults) return false;
-  const dkim = /\bdkim=([a-z]+)/i.exec(authResults)?.[1]?.toLowerCase();
-  const spf = /\bspf=([a-z]+)/i.exec(authResults)?.[1]?.toLowerCase();
-  const arc = /\barc=([a-z]+)/i.exec(authResults)?.[1]?.toLowerCase();
-  const dmarc = /\bdmarc=([a-z]+)/i.exec(authResults)?.[1]?.toLowerCase();
-  if (dkim !== "pass") return false;
-  return spf === "pass" || arc === "pass" || dmarc === "pass";
+// We accept anything ≤ MAX_SPAM_SCORE, which leaves room for legit
+// emails with mild ambiguity (e.g. minor SPF misalignment on a
+// noreply sub-domain) without opening the door to obvious spam. The
+// From: whitelist downstream is the strong identity gate; this
+// function is the spam-filter layer in front of it.
+export const MAX_SPAM_SCORE = 5;
+
+export function isAuthenticated(spamScore: string | null): boolean {
+  // `Number("")` returns 0, so reject empty/whitespace explicitly before
+  // letting it fall through as "score 0 → accept."
+  if (spamScore === null || spamScore.trim() === "") return false;
+  const score = Number(spamScore);
+  if (!Number.isFinite(score)) return false;
+  return score <= MAX_SPAM_SCORE;
 }
 
 // Builds the NotifyCreatedV1 `data` payload from a parsed Google Alert

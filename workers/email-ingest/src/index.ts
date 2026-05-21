@@ -37,26 +37,18 @@ export default {
     const headers = message.headers;
     const subject = headers.get("subject") ?? "";
 
-    // 1. DKIM (+ SPF or ARC or DMARC) check — see parser.isAuthenticated.
-    //    CF stamps Authentication-Results on every inbound mail; a
-    //    missing or partial header = reject.
-    const authResults = headers.get("authentication-results");
-    if (!isAuthenticated(authResults)) {
-      // Dump every header so `wrangler tail` shows exactly which keys
-      // CF actually sets — `authResults` may come back null if CF
-      // names the header differently (e.g. `cf-authentication-results`).
-      const allHeaders: Record<string, string> = {};
-      for (const [k, v] of headers.entries()) {
-        allHeaders[k] = v.length > 400 ? `${v.slice(0, 400)}…` : v;
-      }
-      console.warn("auth fail", {
+    // 1. Spam-score gate — see parser.isAuthenticated. CF Email Routing
+    //    rolls DKIM/SPF/DMARC/etc. into a single `x-cf-spamh-score`
+    //    header; we accept ≤ 5 and reject anything higher. The From:
+    //    whitelist below is the strong identity check.
+    const spamScore = headers.get("x-cf-spamh-score");
+    if (!isAuthenticated(spamScore)) {
+      console.warn("spam-score reject", {
         subject,
         envelopeFrom: message.from,
-        authResults,
-        headerKeys: [...headers.keys()],
-        allHeaders,
+        spamScore,
       });
-      message.setReject("Sender authentication (DKIM / SPF or ARC) did not pass");
+      message.setReject("Mail rejected (CF spam score too high)");
       return;
     }
 

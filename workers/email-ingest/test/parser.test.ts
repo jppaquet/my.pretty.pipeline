@@ -50,41 +50,32 @@ describe("classify", () => {
 });
 
 describe("isAuthenticated", () => {
-  it("passes when dkim and spf both land at pass (direct delivery)", () => {
-    expect(isAuthenticated("mx.cloudflare.com; spf=pass; dkim=pass; dmarc=pass")).toBe(true);
+  // CF's `x-cf-spamh-score`: 0 = clean, higher = more concerning.
+  // Threshold is MAX_SPAM_SCORE (5) per parser.ts.
+
+  it("accepts score 0 (the observed value for legitimate Gmail-side notifications)", () => {
+    expect(isAuthenticated("0")).toBe(true);
   });
 
-  it("passes when dkim passes and arc passes even if spf fails (Gmail filter-forward)", () => {
-    // Realistic Gmail-forwarded mail: original DKIM intact, SPF fails
-    // because the envelope rewrites through Gmail, ARC stamped by
-    // Gmail attests the original passed at receipt.
-    expect(isAuthenticated("mx.cloudflare.com; spf=fail; dkim=pass; arc=pass")).toBe(true);
+  it("accepts mid-range scores within the threshold", () => {
+    expect(isAuthenticated("1")).toBe(true);
+    expect(isAuthenticated("5")).toBe(true);
   });
 
-  it("passes when dkim passes and dmarc passes even if spf is none and arc is none (forwarding-noreply@google.com)", () => {
-    // Real Cloudflare-observed shape for the Gmail "verify forwarding
-    // address" mail: spf=none (Google's sub-paths don't always SPF),
-    // arc=none (no forwarder), dmarc=pass via DKIM alignment to google.com.
-    expect(isAuthenticated("mx.cloudflare.com; spf=none; dkim=pass; arc=none; dmarc=pass")).toBe(true);
+  it("rejects scores above the threshold", () => {
+    expect(isAuthenticated("6")).toBe(false);
+    expect(isAuthenticated("50")).toBe(false);
+    expect(isAuthenticated("100")).toBe(false);
   });
 
-  it("fails when dkim does not pass, regardless of spf/arc/dmarc", () => {
-    expect(isAuthenticated("mx.cloudflare.com; spf=pass; dkim=fail; arc=pass; dmarc=pass")).toBe(false);
-  });
-
-  it("fails when dkim passes but none of spf/arc/dmarc do", () => {
-    expect(isAuthenticated("mx.cloudflare.com; spf=fail; dkim=pass; arc=fail; dmarc=fail")).toBe(false);
-    expect(isAuthenticated("mx.cloudflare.com; spf=none; dkim=pass; arc=none")).toBe(false);
-    expect(isAuthenticated("mx.cloudflare.com; spf=neutral; dkim=pass")).toBe(false);
-  });
-
-  it("fails on a missing header", () => {
+  it("rejects when the header is absent", () => {
     expect(isAuthenticated(null)).toBe(false);
-    expect(isAuthenticated("")).toBe(false);
   });
 
-  it("fails when dkim is absent (no implicit pass)", () => {
-    expect(isAuthenticated("mx.cloudflare.com; spf=pass; arc=pass; dmarc=pass")).toBe(false);
+  it("rejects when the value is not numeric", () => {
+    expect(isAuthenticated("")).toBe(false);
+    expect(isAuthenticated("undefined")).toBe(false);
+    expect(isAuthenticated("NaN")).toBe(false);
   });
 });
 
