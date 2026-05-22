@@ -68,7 +68,7 @@ public class NotifyCreatedV1ValidatorTests
     }
 
     [Fact]
-    public void Metadata_over_4kb_fails()
+    public void Metadata_over_cap_fails()
     {
         var big = new string('x', NotifyCreatedV1Validator.MetadataMaxBytes);
         var input = new NotifyCreatedV1
@@ -83,6 +83,27 @@ public class NotifyCreatedV1ValidatorTests
         };
         var result = NotifyCreatedV1Validator.Validate(input);
         Assert.Contains(result.Failures, f => f.Field == "metadata");
+    }
+
+    [Fact]
+    public void Metadata_well_under_cap_passes()
+    {
+        // 8 KB of fullBody — a comfortable Google Alerts digest size, well
+        // under the 32 KB cap but over the old 4 KB limit that the
+        // email-ingest Worker kept tripping on real digests.
+        var body = new string('x', 8 * 1024);
+        var input = new NotifyCreatedV1
+        {
+            Source = "s",
+            Title = "t",
+            Body = "b",
+            Metadata = new Dictionary<string, System.Text.Json.JsonElement>
+            {
+                ["fullBody"] = System.Text.Json.JsonDocument.Parse($"\"{body}\"").RootElement,
+            },
+        };
+        var result = NotifyCreatedV1Validator.Validate(input);
+        Assert.Empty(result.Failures);
     }
 
     [Fact]
