@@ -241,15 +241,51 @@ jobs:
           az functionapp config hostname add \
             --resource-group "$RG" --name "$FN" --hostname "$HOST"
 
-          # 2. Issue + bind the App Service Managed Certificate.
-          #    `az webapp config ssl create --hostname` does both in
-          #    one shot: it polls the HTTP-01 challenge (~5 min), then
-          #    binds the resulting cert at sslState=SniEnabled.
-          #    Idempotent: returns the existing cert + leaves the bind
-          #    alone when called on a hostname that's already SNI-enabled.
-          echo "Issuing + binding managed cert for $HOST..."
-          az webapp config ssl create \
-            --resource-group "$RG" --name "$FN" --hostname "$HOST"
+          # 2. Issue the App Service Managed Certificate via the
+          #    Microsoft.Web/sites/certificates ARM endpoint. The
+          #    convenient `az webapp config ssl create --hostname`
+          #    shortcut is NOT supported on Flex Consumption — it
+          #    returns "Request url is invalid. The requested operation
+          #    is not supported for Flex Consumption plans." So we drive
+          #    the ARM call directly with `az rest`.
+          SUB=$(az account show --query id -o tsv)
+          CERT_NAME="mc-${HOST//./-}"
+          PLAN_ID=$(az functionapp show -g "$RG" -n "$FN" --query properties.serverFarmId -o tsv)
+          LOCATION=$(az functionapp show -g "$RG" -n "$FN" --query location -o tsv)
+          CERT_URI="https://management.azure.com/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/sites/${FN}/certificates/${CERT_NAME}?api-version=2023-12-01"
+
+          echo "Issuing managed cert ${CERT_NAME} for ${HOST}..."
+          az rest --method put --url "$CERT_URI" \
+            --body "$(printf '{"location":"%s","properties":{"canonicalName":"%s","serverFarmId":"%s","domainValidationMethod":"http-01"}}' "$LOCATION" "$HOST" "$PLAN_ID")" \
+            >/dev/null
+
+          # HTTP-01 challenge usually completes in ~30s but can stretch
+          # to a few minutes. Poll up to 6 min; if it's not Ready by then
+          # we soft-skip and the next cd-deploy run will bind it.
+          THUMBPRINT=""
+          for i in $(seq 1 36); do
+            STATE=$(az rest --method get --url "$CERT_URI" --query 'properties.provisioningState' -o tsv 2>/dev/null || echo "polling")
+            echo "  attempt $i: provisioningState=${STATE}"
+            if [ "$STATE" = "Succeeded" ]; then
+              THUMBPRINT=$(az rest --method get --url "$CERT_URI" --query 'properties.thumbprint' -o tsv)
+              break
+            fi
+            if [ "$STATE" = "Failed" ]; then
+              echo "::error::cert provisioning failed for $HOST"; exit 1
+            fi
+            sleep 10
+          done
+
+          if [ -z "$THUMBPRINT" ]; then
+            echo "::warning::cert not yet provisioned for $HOST after 6 min — bind on next cd-deploy"
+            exit 0
+          fi
+
+          echo "Binding cert ${THUMBPRINT} to ${HOST}..."
+          az functionapp config ssl bind \
+            --resource-group "$RG" --name "$FN" \
+            --certificate-thumbprint "$THUMBPRINT" \
+            --ssl-type SNI --hostname "$HOST"
 
   # Admin SPA upload. Only the `admin/` static content; no backend.
   # Renders config.template.js → config.js with deploy-time values (tenant,
