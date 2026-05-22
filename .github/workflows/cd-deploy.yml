@@ -265,18 +265,27 @@ jobs:
             >/dev/null
 
           # HTTP-01 challenge usually completes in ~30s but can stretch
-          # to a few minutes. Poll up to 6 min; if it's not Ready by then
-          # we soft-skip and the next cd-deploy run will bind it.
+          # to a few minutes. Poll on `properties.thumbprint` non-empty —
+          # the previous attempt at `provisioningState` came back blank
+          # for 36 iterations even though the resource existed (that
+          # field isn't populated on `sites/certificates` the way it is
+          # on top-level `Microsoft.Web/certificates`). Thumbprint is
+          # the canonical "is it ready" signal: empty until the
+          # HTTP-01 cert is signed by Azure's CA, populated when bind
+          # is possible.
           THUMBPRINT=""
           for i in $(seq 1 36); do
-            STATE=$(az rest --method get --url "$CERT_URI" --query 'properties.provisioningState' -o tsv 2>/dev/null || echo "polling")
-            echo "  attempt $i: provisioningState=${STATE}"
-            if [ "$STATE" = "Succeeded" ]; then
-              THUMBPRINT=$(az rest --method get --url "$CERT_URI" --query 'properties.thumbprint' -o tsv)
+            THUMBPRINT=$(az rest --method get --url "$CERT_URI" --query 'properties.thumbprint' -o tsv 2>/dev/null || echo "")
+            echo "  attempt $i: thumbprint=${THUMBPRINT:-(empty)}"
+            if [ -n "$THUMBPRINT" ]; then
               break
             fi
-            if [ "$STATE" = "Failed" ]; then
-              echo "::error::cert provisioning failed for $HOST"; exit 1
+            # Dump the full resource on the first poll iteration so the
+            # next failure mode (e.g. cert in `Failed` state, wrong
+            # canonicalName) is visible without another round-trip.
+            if [ "$i" = "1" ]; then
+              echo "  cert resource snapshot (first poll):"
+              az rest --method get --url "$CERT_URI" --query 'properties' -o json 2>/dev/null | sed 's/^/    /'
             fi
             sleep 10
           done
