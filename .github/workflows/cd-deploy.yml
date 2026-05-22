@@ -252,7 +252,12 @@ jobs:
           CERT_NAME="mc-${HOST//./-}"
           PLAN_ID=$(az functionapp show -g "$RG" -n "$FN" --query properties.serverFarmId -o tsv)
           LOCATION=$(az functionapp show -g "$RG" -n "$FN" --query location -o tsv)
-          CERT_URI="https://management.azure.com/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/sites/${FN}/certificates/${CERT_NAME}?api-version=2023-12-01"
+          # `sites/certificates` requires a newer api-version than the
+          # sibling `sites/syncfunctiontriggers` + `sites/functions`
+          # endpoints used elsewhere in this workflow — 2023-12-01
+          # returns NoRegisteredProviderFound on the cert resource.
+          # Pin to the latest non-preview supported version.
+          CERT_URI="https://management.azure.com/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/sites/${FN}/certificates/${CERT_NAME}?api-version=2025-05-01"
 
           echo "Issuing managed cert ${CERT_NAME} for ${HOST}..."
           az rest --method put --url "$CERT_URI" \
