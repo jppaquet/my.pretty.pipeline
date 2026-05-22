@@ -110,11 +110,15 @@ function normalizeListMarkers(md: string): string {
 export function buildPayload(topic: string, parsed: Email): NotifyData {
   const text = (parsed.text ?? "").trim();
   const html = (parsed.html ?? "").trim();
-  // Prefer text/plain when present (cheap, faithful). When only HTML is
-  // available — the common case for Google Alerts — convert to markdown
-  // so the iOS detail view's MarkdownView renders it natively (links,
-  // bullets, emphasis) instead of showing literal `<a>` / `<li>` tags.
-  const full = text || (html ? normalizeListMarkers(turndown.turndown(html)).trim() : "");
+  // Prefer the HTML-converted markdown when present. Google Alerts
+  // emails include BOTH parts in the MIME multipart: the text/plain
+  // version is decorative-sparse (just titles wrapped in `=== … ===`
+  // separators + URLs, ~10× shorter than the HTML), and using it
+  // leaves the iOS detail view looking truncated. HTML → turndown
+  // markdown yields the full digest with links, snippets, and
+  // emphasis intact. Fall back to text/plain only when HTML is absent.
+  const fromHtml = html ? normalizeListMarkers(turndown.turndown(html)).trim() : "";
+  const full = fromHtml || text;
   const summary = summarize(full, BODY_SUMMARY_MAX);
 
   return {

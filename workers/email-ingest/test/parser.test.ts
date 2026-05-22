@@ -185,14 +185,23 @@ describe("buildPayload", () => {
     expect(out.metadata.fullBody).not.toContain("alert(1)");
   });
 
-  it("prefers text/plain over text/html when both are present", () => {
-    // Avoid the HTML→markdown round-trip when the producer already
-    // gives us a clean plain-text version (cheaper + more faithful).
+  it("prefers HTML-converted markdown over text/plain when both are present", () => {
+    // Google Alerts emits both parts but text/plain is decorative-sparse
+    // (titles separated by `=== … ===`, no snippets), so going through
+    // turndown on the HTML yields a much richer body. Plain text is the
+    // fallback only when HTML is absent.
     const out = buildPayload("topic", mkEmail({
-      text: "Plain text body",
-      html: "<p>HTML body</p>",
+      text: "=== Title ===\nhttps://example.com",
+      html: "<h3><a href='https://example.com'>Title</a></h3><p>Full snippet of content here.</p>",
     }));
-    expect(out.metadata.fullBody).toBe("Plain text body");
+    expect(out.metadata.fullBody).toContain("[Title](https://example.com)");
+    expect(out.metadata.fullBody).toContain("Full snippet of content here.");
+    expect(out.metadata.fullBody).not.toContain("===");
+  });
+
+  it("falls back to text/plain when html is missing", () => {
+    const out = buildPayload("topic", mkEmail({ text: "plain only", html: "" }));
+    expect(out.metadata.fullBody).toBe("plain only");
   });
 
   it("yields empty body when both text and html are missing", () => {
