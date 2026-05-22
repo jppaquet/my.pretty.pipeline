@@ -224,11 +224,16 @@
         "<td></td>";
       const action = tr.querySelector("td:last-child");
       if (row.active) {
-        const btn = document.createElement("button");
-        btn.textContent = "revoke";
-        btn.className = "danger";
-        btn.onclick = () => revokeProject(row.id, btn);
-        action.appendChild(btn);
+        const rotateBtn = document.createElement("button");
+        rotateBtn.textContent = "rotate";
+        rotateBtn.onclick = () => rotateProject(row.id, rotateBtn);
+        action.appendChild(rotateBtn);
+
+        const revokeBtn = document.createElement("button");
+        revokeBtn.textContent = "revoke";
+        revokeBtn.className = "danger";
+        revokeBtn.onclick = () => revokeProject(row.id, revokeBtn);
+        action.appendChild(revokeBtn);
       } else {
         action.innerHTML = "<span class='muted'>—</span>";
       }
@@ -249,10 +254,43 @@
     }
   }
 
+  async function rotateProject(id, btn) {
+    // Hard confirm — rotation is destructive on the consumer side. Any
+    // running producer using the old key will start 401'ing as soon as
+    // the response lands in cosmos. The operator must update consumers
+    // (e.g. INGEST_API_KEY GH secret + cd-worker re-run) right after.
+    if (!confirm(
+      "Rotate the key for '" + id + "'?\n\n" +
+      "The current key will stop working immediately. The new key shows once."
+    )) return;
+    btn.disabled = true;
+    setStatus("projects-status", "rotating " + id + "…");
+    try {
+      const data = await api("/v1/admin/projects/" + encodeURIComponent(id) + "/rotate", "POST");
+      // Reuse the mint result step — just relabel the headings.
+      mintResultHeading.textContent = "key rotated ✓";
+      mintResultWarning.innerHTML =
+        "copy this key now — it will <strong>not be shown again</strong>. " +
+        "losing it means rotating again.";
+      mintKeyEl.textContent = data.key;
+      mintFormStep.hidden = true;
+      mintResultStep.hidden = false;
+      mintConfirmEl.checked = false;
+      mintDoneBtn.disabled = true;
+      mintDialog.showModal();
+      setStatus("projects-status", "rotated " + id);
+    } catch (e) {
+      setStatus("projects-status", e.message, true);
+      btn.disabled = false;
+    }
+  }
+
   // ── mint dialog ────────────────────────────────────────────────────
   const mintDialog = $("mint-dialog");
   const mintFormStep = $("mint-form-step");
   const mintResultStep = $("mint-result-step");
+  const mintResultHeading = $("mint-result-heading");
+  const mintResultWarning = $("mint-result-warning");
   const mintIdInput = $("mint-id");
   const mintNameInput = $("mint-name");
   const mintErrorEl = $("mint-error");
@@ -268,6 +306,11 @@
     mintErrorEl.textContent = "";
     mintConfirmEl.checked = false;
     mintDoneBtn.disabled = true;
+    // Reset the headings in case the dialog was last used for a rotate.
+    mintResultHeading.textContent = "key minted ✓";
+    mintResultWarning.innerHTML =
+      "copy this key now — it will <strong>not be shown again</strong>. " +
+      "losing it means re-minting the project.";
     mintDialog.showModal();
     mintIdInput.focus();
   }

@@ -78,6 +78,23 @@ public sealed class ProjectsAdminFunction
         };
     }
 
+    [Function("AdminRotateProject")]
+    public async Task<HttpResponseData> Rotate(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "v1/admin/projects/{id}/rotate")]
+        HttpRequestData req,
+        FunctionContext ctx,
+        string id)
+    {
+        var result = await _handler.RotateAsync(id, ctx.CancellationToken);
+        return result switch
+        {
+            ProjectMutationResult.OkWithKey ok => await OnRotated(req, ctx, id, ok),
+            ProjectMutationResult.NotFound => req.CreateResponse(HttpStatusCode.NotFound),
+            ProjectMutationResult.InvalidInput inv => await Json(req, HttpStatusCode.BadRequest, new { errors = new[] { new { field = inv.Field, message = inv.Message } } }),
+            _ => throw new InvalidOperationException($"unexpected rotate result {result.GetType().Name}"),
+        };
+    }
+
     private async Task<HttpResponseData> OnMinted(HttpRequestData req, FunctionContext ctx, ProjectMutationResult.OkWithKey ok)
     {
         _logger.LogInformation("admin {Actor} minted project {ProjectId}", Actor(ctx), ok.Project.Id);
@@ -90,6 +107,15 @@ public sealed class ProjectsAdminFunction
     {
         _logger.LogInformation("admin {Actor} revoked project {ProjectId}", Actor(ctx), id);
         return await Json(req, HttpStatusCode.OK, ok.Project);
+    }
+
+    private async Task<HttpResponseData> OnRotated(HttpRequestData req, FunctionContext ctx, string id, ProjectMutationResult.OkWithKey ok)
+    {
+        _logger.LogInformation("admin {Actor} rotated project {ProjectId}", Actor(ctx), id);
+        // Same shape as the Mint response: { project, key }. The cleartext
+        // key is the only place it surfaces; the SPA must show it once
+        // and not persist it.
+        return await Json(req, HttpStatusCode.OK, new { project = ok.Project, key = ok.PlaintextKey });
     }
 
     private static string Actor(FunctionContext ctx)

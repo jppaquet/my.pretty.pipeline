@@ -147,4 +147,76 @@ public class ProjectsAdminHandlerTests
         var handler = BuildHandler();
         Assert.IsType<ProjectMutationResult.NotFound>(await handler.RevokeAsync("never-existed-" + Guid.NewGuid().ToString("N")));
     }
+
+    [Fact]
+    public async Task Rotate_issues_a_new_key_that_verifies_and_invalidates_the_old()
+    {
+        var hasher = new ApiKeyHasher(TestPepper);
+        var handler = new ProjectsAdminHandler(_fx.Projects, hasher);
+        var minted = (ProjectMutationResult.OkWithKey)await handler.MintAsync("rotate-target", "RT");
+        var oldKey = minted.PlaintextKey;
+
+        var rotated = Assert.IsType<ProjectMutationResult.OkWithKey>(
+            await handler.RotateAsync("rotate-target"));
+        var newKey = rotated.PlaintextKey;
+
+        Assert.NotEqual(oldKey, newKey);
+        Assert.StartsWith("npk_", newKey);
+        Assert.Equal("rotate-target", rotated.Project.Id);
+        Assert.True(rotated.Project.Active);
+
+        // The persisted doc now hashes the NEW key — old key no longer
+        // verifies, new key does. This is what makes rotate a real
+        // rotation, not a parallel-key issuance.
+        var doc = (await _fx.Projects.ReadItemAsync<ProjectDocument>(
+            "rotate-target", new PartitionKey("rotate-target"))).Resource;
+        var salt = Convert.FromBase64String(doc.SaltBase64);
+        var hash = Convert.FromBase64String(doc.KeyHashBase64);
+        Assert.True(hasher.Verify(newKey, salt, hash));
+        Assert.False(hasher.Verify(oldKey, salt, hash));
+    }
+
+    [Fact]
+    public async Task Rotate_preserves_display_name_and_id()
+    {
+        var handler = BuildHandler();
+        await handler.MintAsync("rotate-keep-shape", "Original Display");
+        var rotated = (ProjectMutationResult.OkWithKey)await handler.RotateAsync("rotate-keep-shape");
+
+        Assert.Equal("rotate-keep-shape", rotated.Project.Id);
+        Assert.Equal("Original Display", rotated.Project.DisplayName);
+    }
+
+    [Fact]
+    public async Task Rotate_preserves_revoked_state()
+    {
+        var handler = BuildHandler();
+        await handler.MintAsync("rotate-revoked", "RR");
+        await handler.RevokeAsync("rotate-revoked");
+
+        var rotated = (ProjectMutationResult.OkWithKey)await handler.RotateAsync("rotate-revoked");
+
+        // Rotating a revoked project gives a fresh inert key — the operator
+        // can stage the new key now, then re-enable via a future unrevoke
+        // path. Mixing rotate + unrevoke into one action would muddle audit
+        // ("was this key used while revoked?"). The Ingest path still
+        // short-circuits on `!project.Active`.
+        Assert.False(rotated.Project.Active);
+    }
+
+    [Fact]
+    public async Task Rotate_on_unknown_id_returns_not_found()
+    {
+        var handler = BuildHandler();
+        Assert.IsType<ProjectMutationResult.NotFound>(
+            await handler.RotateAsync("never-existed-" + Guid.NewGuid().ToString("N")));
+    }
+
+    [Fact]
+    public async Task Rotate_with_blank_id_is_invalid_input()
+    {
+        var handler = BuildHandler();
+        var inv = Assert.IsType<ProjectMutationResult.InvalidInput>(await handler.RotateAsync(""));
+        Assert.Equal("projectId", inv.Field);
+    }
 }
