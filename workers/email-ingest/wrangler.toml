@@ -12,6 +12,14 @@
 name = "email-ingest"
 main = "src/index.ts"
 compatibility_date = "2026-01-15"
+# This Worker is email-triggered only — no HTTP surface needed. Disable
+# the default `*.workers.dev` URL that CF auto-publishes for every
+# Worker. Without this, drive-by GETs from crawlers / scanners
+# (`/favicon.ico`, `/.env`, etc.) crash with "Handler does not export
+# a fetch() function" because we don't define one. Setting this to
+# false unpublishes the URL entirely; only the Email Routing trigger
+# bound in infra/cloudflare/email-routing.tf reaches the Worker.
+workers_dev = false
 # `nodejs_compat` exposes Node.js globals (`process`, `Buffer`, …) and a
 # subset of the stdlib in the V8 isolate. Needed by `node-html-parser`
 # (transitive of `node-html-markdown`) which calls `process.hrtime` for
