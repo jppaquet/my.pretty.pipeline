@@ -147,11 +147,58 @@ describe("buildPayload", () => {
     expect(out.metadata.fullBody.length).toBeGreaterThan(BODY_SUMMARY_MAX);
   });
 
-  it("falls back to the html part when text is missing", () => {
-    const email = mkEmail({ text: "", html: "<p>html only body</p>" });
-    const out = buildPayload("topic", email);
-    expect(out.body).toBe("<p>html only body</p>");
-    expect(out.metadata.fullBody).toBe("<p>html only body</p>");
+  it("converts the html part to markdown when text is missing", () => {
+    // Realistic Google Alerts shape: links + bold + a list of results,
+    // wrapped in `<table>` layout that we flatten via the custom rule.
+    const html = `
+      <html><body>
+        <table><tr><td>
+          <h3><a href="https://example.com/article-1">First result with <b>important</b> term</a></h3>
+          <p>Snippet of the first result with more context...</p>
+          <h3><a href="https://example.com/article-2">Second hit</a></h3>
+          <p>Another snippet.</p>
+          <ul>
+            <li>See also: <a href="https://example.com/more">more</a></li>
+            <li>Unsubscribe: <a href="https://example.com/unsub">here</a></li>
+          </ul>
+        </td></tr></table>
+      </body></html>`;
+    const out = buildPayload("topic", mkEmail({ text: "", html }));
+
+    // Links survive as markdown `[text](url)`.
+    expect(out.metadata.fullBody).toMatch(/\[First result with \*\*important\*\* term\]\(https:\/\/example\.com\/article-1\)/);
+    expect(out.metadata.fullBody).toMatch(/\[Second hit\]\(https:\/\/example\.com\/article-2\)/);
+    // No raw HTML tags leak through.
+    expect(out.metadata.fullBody).not.toMatch(/<\/?(p|a|h3|ul|li|table|tr|td|b)\b/i);
+    // Bullets use `-` (matches what iOS MarkdownView's unordered-list
+    // classifier recognizes; configured via bulletListMarker on the
+    // TurndownService instance in parser.ts).
+    expect(out.metadata.fullBody).toMatch(/^- See also:/m);
+    expect(out.metadata.fullBody).toMatch(/^- Unsubscribe:/m);
+  });
+
+  it("strips style/script blocks instead of leaking their contents", () => {
+    const html = `<style>.x{color:red}</style><script>alert(1)</script><p>visible body</p>`;
+    const out = buildPayload("topic", mkEmail({ text: "", html }));
+    expect(out.metadata.fullBody).toContain("visible body");
+    expect(out.metadata.fullBody).not.toContain(".x{");
+    expect(out.metadata.fullBody).not.toContain("alert(1)");
+  });
+
+  it("prefers text/plain over text/html when both are present", () => {
+    // Avoid the HTML→markdown round-trip when the producer already
+    // gives us a clean plain-text version (cheaper + more faithful).
+    const out = buildPayload("topic", mkEmail({
+      text: "Plain text body",
+      html: "<p>HTML body</p>",
+    }));
+    expect(out.metadata.fullBody).toBe("Plain text body");
+  });
+
+  it("yields empty body when both text and html are missing", () => {
+    const out = buildPayload("topic", mkEmail({ text: "", html: "" }));
+    expect(out.body).toBe("");
+    expect(out.metadata.fullBody).toBe("");
   });
 
   it("truncates a long subject so title stays within TITLE_MAX", () => {

@@ -12,11 +12,13 @@
   "//comment": "Versions intentionally pinned (no ^ ranges) for supply-chain hygiene. cd-worker.yml runs `npm ci` so the package-lock.json (committed) is the source of truth. To bump a dep: edit the exact version below + `rm package-lock.json` + `npm install` + commit both files together so reviewers can diff the resolved tree.",
   "devDependencies": {
     "@cloudflare/workers-types": "4.20260520.1",
+    "@types/turndown": "5.0.5",
     "typescript": "5.9.3",
     "vitest": "3.2.4",
     "wrangler": "4.93.0"
   },
   "dependencies": {
-    "postal-mime": "2.7.4"
+    "postal-mime": "2.7.4",
+    "turndown": "7.2.2"
   }
 }
