@@ -104,6 +104,65 @@ function preprocessHtml(html: string): string {
     .replace(/<\/?(table|thead|tbody|tfoot|tr|td|th)\b[^>]*>/gi, " ");
 }
 
+// Strips inline markdown syntax + decodes common HTML entities so a
+// summary is safe to show in an APNs push banner (which renders text
+// literally, with no markdown awareness). The detail view's
+// `metadata.fullBody` keeps the markdown intact for rich rendering.
+//
+// Coverage:
+//   - `[text](url)` and `![alt](url)`  → text / alt
+//   - `**bold**`, `__bold__`           → bold
+//   - `*italic*`, `_italic_`           → italic
+//   - `~~strike~~`                     → strike
+//   - `` `code` ``                     → code
+//   - Leading `#…` headings            → drop the `#`s + space
+//   - Leading `- ` / `* ` / `1. ` list markers → drop the marker
+//   - Horizontal rules (`---`, `***`)  → drop the line
+//   - Common HTML entities             → decoded
+//   - Successive blank lines           → single newline
+export function stripMarkdownToPlain(md: string): string {
+  let s = md;
+
+  // Images first (so the ! in `![alt](url)` doesn't leak), then links.
+  s = s.replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1");
+  s = s.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1");
+
+  // Emphasis pairs. Process the doubles before the singles so `**foo**`
+  // doesn't get half-stripped by the `*…*` rule.
+  s = s.replace(/\*\*([^*]+)\*\*/g, "$1");
+  s = s.replace(/__([^_]+)__/g, "$1");
+  s = s.replace(/\*([^*\n]+)\*/g, "$1");
+  s = s.replace(/(^|[^\w])_([^_\n]+)_($|[^\w])/g, "$1$2$3");
+  s = s.replace(/~~([^~]+)~~/g, "$1");
+  s = s.replace(/`([^`\n]+)`/g, "$1");
+
+  // Line-leading markers (heading hashes, list bullets, blockquote `>`).
+  // The `^` + multiline flag matches each line individually.
+  s = s.replace(/^\s{0,3}#{1,6}\s+/gm, "");
+  s = s.replace(/^\s{0,3}[-*+]\s+/gm, "");
+  s = s.replace(/^\s{0,3}\d+\.\s+/gm, "");
+  s = s.replace(/^\s{0,3}>\s?/gm, "");
+
+  // Horizontal rules — drop entire matching lines.
+  s = s.replace(/^\s*([-*_]\s*){3,}\s*$/gm, "");
+
+  // HTML entities most likely to leak through node-html-markdown when
+  // the source had layout we stripped via regex (preprocessHtml).
+  s = s.replace(/&amp;/g, "&")
+       .replace(/&lt;/g, "<")
+       .replace(/&gt;/g, ">")
+       .replace(/&quot;/g, "\"")
+       .replace(/&#39;/g, "'")
+       .replace(/&apos;/g, "'")
+       .replace(/&nbsp;/g, " ")
+       .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+       .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCharCode(parseInt(h, 16)));
+
+  // Collapse extra whitespace from the cleanup pass.
+  s = s.replace(/\n{3,}/g, "\n\n");
+  return s.trim();
+}
+
 export function buildPayload(topic: string, parsed: Email): NotifyData {
   const text = (parsed.text ?? "").trim();
   const html = (parsed.html ?? "").trim();
@@ -116,7 +175,12 @@ export function buildPayload(topic: string, parsed: Email): NotifyData {
   // Fall back to text/plain only when HTML is absent.
   const fromHtml = html ? htmlToMarkdown.translate(preprocessHtml(html)).trim() : "";
   const full = fromHtml || text;
-  const summary = summarize(full, BODY_SUMMARY_MAX);
+  // The push banner renders body as plain text — markdown syntax
+  // (`[link](url)`, `**bold**`, leading `#`/`-`) shows up literally on
+  // the lock-screen otherwise. Strip syntax before summarize so the
+  // banner reads naturally. metadata.fullBody keeps the full markdown
+  // for the iOS detail view, which renders via MarkdownView.
+  const summary = summarize(stripMarkdownToPlain(full), BODY_SUMMARY_MAX);
 
   return {
     title: truncate(`Google Alert - ${topic}`, TITLE_MAX),

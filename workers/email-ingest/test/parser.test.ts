@@ -6,6 +6,7 @@ import {
   buildPayload,
   classify,
   isAuthenticated,
+  stripMarkdownToPlain,
   summarize,
   truncate,
 } from "../src/parser";
@@ -115,6 +116,66 @@ describe("summarize", () => {
   });
 });
 
+describe("stripMarkdownToPlain", () => {
+  it("strips link syntax to the visible text", () => {
+    expect(stripMarkdownToPlain("[Anthropic raises $$$](https://example.com)"))
+      .toBe("Anthropic raises $$$");
+  });
+
+  it("strips image syntax to the alt text", () => {
+    expect(stripMarkdownToPlain("![Logo](https://example.com/logo.png)")).toBe("Logo");
+  });
+
+  it("strips bold and italic markers", () => {
+    expect(stripMarkdownToPlain("**bold** and *italic* and ***both***"))
+      .toBe("bold and italic and both");
+    expect(stripMarkdownToPlain("__bold__ and _italic_")).toBe("bold and italic");
+  });
+
+  it("strips strikethrough and inline code", () => {
+    expect(stripMarkdownToPlain("~~old~~ and `code`")).toBe("old and code");
+  });
+
+  it("strips heading hashes", () => {
+    expect(stripMarkdownToPlain("# Big\n## Medium\n### Small")).toBe("Big\nMedium\nSmall");
+  });
+
+  it("strips list bullets and ordered markers", () => {
+    expect(stripMarkdownToPlain("- one\n- two\n1. first\n2. second"))
+      .toBe("one\ntwo\nfirst\nsecond");
+  });
+
+  it("strips blockquote prefix and horizontal rules", () => {
+    expect(stripMarkdownToPlain("> quoted\n---\nafter")).toBe("quoted\n\nafter");
+  });
+
+  it("decodes common HTML entities", () => {
+    expect(stripMarkdownToPlain("AT&amp;T &lt;3 &quot;hi&quot; &#39;ok&#39; &nbsp; &#x41;"))
+      .toBe("AT&T <3 \"hi\" 'ok'   A");
+  });
+
+  it("collapses runs of blank lines", () => {
+    expect(stripMarkdownToPlain("a\n\n\n\nb")).toBe("a\n\nb");
+  });
+
+  it("produces clean lock-screen text from a typical Google Alerts excerpt", () => {
+    const md = [
+      "### [Anthropic raises $$$](https://example.com/a)",
+      "",
+      "**Anthropic** announced a new round with *strategic* partners. " +
+        "See the [full release](https://example.com/release) for details.",
+      "",
+      "- Cited investors",
+      "- Round size",
+    ].join("\n");
+    const out = stripMarkdownToPlain(md);
+    expect(out).not.toMatch(/[\[\]()*_`#>]/);
+    expect(out).toContain("Anthropic raises $$$");
+    expect(out).toContain("Anthropic announced a new round");
+    expect(out).toContain("Cited investors");
+  });
+});
+
 describe("buildPayload", () => {
   const mkEmail = (overrides: Partial<Email>): Email =>
     ({
@@ -175,6 +236,21 @@ describe("buildPayload", () => {
     // TurndownService instance in parser.ts).
     expect(out.metadata.fullBody).toMatch(/^- See also:/m);
     expect(out.metadata.fullBody).toMatch(/^- Unsubscribe:/m);
+  });
+
+  it("body is plain (no markdown syntax) but metadata.fullBody keeps the markdown", () => {
+    const html = `
+      <h3><a href="https://example.com/a">Anthropic raises <b>$$$</b></a></h3>
+      <p>Snippet with <em>emphasis</em> and a <a href="https://example.com/b">link</a>.</p>
+      <ul><li>investor list</li></ul>`;
+    const out = buildPayload("anthropic", mkEmail({ text: "", html }));
+
+    // Push banner: plain text only — no markdown chars survive.
+    expect(out.body).not.toMatch(/[\[\]()*_`#>]/);
+    expect(out.body).toContain("Anthropic raises $$$");
+    // Detail view: markdown intact.
+    expect(out.metadata.fullBody).toMatch(/\[Anthropic raises \*\*\$\$\$\*\*\]\(https:/);
+    expect(out.metadata.fullBody).toMatch(/^- investor list/m);
   });
 
   it("strips style/script blocks instead of leaking their contents", () => {
