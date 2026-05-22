@@ -67,11 +67,15 @@ reviewers can audit the tree change.
   Hand-rolling multipart + base64/quoted-printable decoding is a
   footgun. By Andris Reinman (nodemailer / mailparser author),
   zero runtime deps, Workers-compatible.
-- **`turndown`** — converts the HTML body of Google Alerts (which
-  ship HTML-only, no `text/plain`) into Markdown so iOS
+- **`node-html-markdown`** — converts the HTML body of Google Alerts
+  (which arrives HTML-rich; the matching `text/plain` is decorative-
+  sparse, just `=== title ===` separators) into Markdown so iOS
   `MarkdownView` renders links + bullets natively instead of literal
-  `<a>` / `<li>` tags. By Dom Christie + Wikimedia-maintained
-  `@mixmark-io/domino` DOM polyfill. We apply a custom rule to flatten
-  `<table>` layout (Google Alerts wraps results in tables; markdown
-  tables read terribly when cells are paragraphs) and post-process
-  list markers to single-space (iOS classifier expects exactly `- `).
+  `<a>` / `<li>` tags. Pure-JS HTML tokenizer (via `node-html-parser`),
+  **no DOM dependency** — works in CF Workers' V8 isolate where the
+  earlier `turndown` choice crashed with `ReferenceError: document
+  is not defined` on its first invocation. Single direct dep
+  (`node-html-parser`, ~3-years mature). We pre-strip layout tables
+  + `<style>`/`<script>` blocks before the conversion: Google Alerts
+  wraps each result in `<table>` for visual layout, which would
+  otherwise render as a pipe-style markdown table that reads terribly.
