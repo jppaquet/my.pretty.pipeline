@@ -12,6 +12,12 @@
 name = "email-ingest"
 main = "src/index.ts"
 compatibility_date = "2026-01-15"
+# `nodejs_compat` exposes Node.js globals (`process`, `Buffer`, …) and a
+# subset of the stdlib in the V8 isolate. Needed by `node-html-parser`
+# (transitive of `node-html-markdown`) which calls `process.hrtime` for
+# its perf-timing helper — without the flag every email crashes with
+# `ReferenceError: process is not defined`.
+compatibility_flags = ["nodejs_compat"]
 
 # Workers logs (observability) — cheap insurance for a service that runs
 # on inbound email and would otherwise be invisible when it misbehaves.
