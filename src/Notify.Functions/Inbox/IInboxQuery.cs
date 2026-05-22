@@ -1,4 +1,6 @@
+using System.Net;
 using Microsoft.Azure.Cosmos;
+using Microsoft.Extensions.Logging;
 using Notify.Shared.Cosmos;
 
 namespace Notify.Functions.Inbox;
@@ -18,8 +20,13 @@ public sealed record InboxPage(IReadOnlyList<NotificationDocument> Items, string
 public sealed class CosmosInboxQuery : IInboxQuery
 {
     private readonly Container _notifications;
+    private readonly ILogger<CosmosInboxQuery> _logger;
 
-    public CosmosInboxQuery(Container notifications) => _notifications = notifications;
+    public CosmosInboxQuery(Container notifications, ILogger<CosmosInboxQuery> logger)
+    {
+        _notifications = notifications;
+        _logger = logger;
+    }
 
     public async Task<InboxPage> QueryAsync(string userId, string? source, int limit, string? continuationToken, CancellationToken ct = default)
     {
@@ -49,7 +56,22 @@ public sealed class CosmosInboxQuery : IInboxQuery
         if (!iterator.HasMoreResults)
             return new InboxPage(Array.Empty<NotificationDocument>(), null);
 
-        var page = await iterator.ReadNextAsync(ct);
-        return new InboxPage(page.ToList(), page.ContinuationToken);
+        try
+        {
+            var page = await iterator.ReadNextAsync(ct);
+            return new InboxPage(page.ToList(), page.ContinuationToken);
+        }
+        catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.BadRequest && !string.IsNullOrEmpty(continuationToken))
+        {
+            // Stale or mangled continuation token (e.g. the client cached
+            // one from a previous deploy where the query plan differed, or
+            // somebody hand-edited the URL). Surface as "end of inbox" by
+            // returning an empty page with a null next-token so the iOS
+            // list gracefully stops paginating instead of erroring with
+            // a 500. The token gets cleared on the next refresh.
+            _logger.LogWarning(ex, "stale/invalid continuation token for user {UserSubHash}; returning empty page",
+                userId.GetHashCode().ToString("x8"));
+            return new InboxPage(Array.Empty<NotificationDocument>(), null);
+        }
     }
 }

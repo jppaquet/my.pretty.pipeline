@@ -1,6 +1,5 @@
 using System.Net;
 using System.Text.Json;
-using System.Web;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
@@ -58,7 +57,10 @@ public sealed class InboxMutationFunction
             return unauth;
         }
 
-        var source = HttpUtility.ParseQueryString(req.Url.Query)["source"];
+        // Percent-only parser — see Inbox/QueryStringParser.cs. Source
+        // names follow [A-Za-z0-9._-] today so this is defensive, but
+        // mirroring InboxFunction's parsing keeps the two paths in sync.
+        var source = QueryStringParser.Parse(req.Url.Query).GetValueOrDefault("source");
         var result = await _handler.HandleAsync(user.Sub, source, id, action);
 
         return result switch

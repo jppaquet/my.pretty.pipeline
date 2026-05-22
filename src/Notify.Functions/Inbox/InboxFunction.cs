@@ -1,6 +1,5 @@
 using System.Net;
 using System.Text.Json;
-using System.Web;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
@@ -35,12 +34,16 @@ public sealed class InboxFunction
         if (context.Items.TryGetValue(JwtAuthMiddleware.UserContextKey, out var raw)
             && raw is AppleUser user)
         {
-            var query = HttpUtility.ParseQueryString(req.Url.Query);
+            // Percent-only parsing — Cosmos continuation tokens contain `+`
+            // natively (base64 alphabet); the form-encoded BCL parser would
+            // silently turn those into spaces and the next ReadNextAsync
+            // would throw BadRequest. See Inbox/QueryStringParser.cs.
+            var query = QueryStringParser.Parse(req.Url.Query);
             var request = new InboxQueryRequest
             {
-                Source = query["source"],
-                Limit = int.TryParse(query["limit"], out var l) ? l : InboxOptions.DefaultLimit,
-                ContinuationToken = query["continuationToken"],
+                Source = query.TryGetValue("source", out var s) ? s : null,
+                Limit = query.TryGetValue("limit", out var lv) && int.TryParse(lv, out var l) ? l : InboxOptions.DefaultLimit,
+                ContinuationToken = query.TryGetValue("continuationToken", out var ct) ? ct : null,
             };
 
             var result = await _handler.HandleAsync(user.Sub, request);
