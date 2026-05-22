@@ -296,10 +296,20 @@ jobs:
           fi
 
           echo "Binding cert ${THUMBPRINT} to ${HOST}..."
-          az functionapp config ssl bind \
-            --resource-group "$RG" --name "$FN" \
-            --certificate-thumbprint "$THUMBPRINT" \
-            --ssl-type SNI --hostname "$HOST"
+          # `az functionapp config ssl bind` looks up the cert by
+          # thumbprint at the TOP-LEVEL `Microsoft.Web/certificates`
+          # path, but Flex stores managed certs under the SITE-child
+          # path `Microsoft.Web/sites/<fn>/certificates/<name>` (per
+          # the same Flex limitation that forced the manual cert PUT
+          # above). The az CLI shortcut returns "Certificate for
+          # thumbprint X not found" even when the cert exists. Bind
+          # by PUTing the hostNameBinding directly with sslState=
+          # SniEnabled + the thumbprint — same effect, idempotent.
+          BIND_URI="https://management.azure.com/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/sites/${FN}/hostNameBindings/${HOST}?api-version=2025-05-01"
+          az rest --method put --url "$BIND_URI" \
+            --body "$(printf '{"properties":{"siteName":"%s","customHostNameDnsRecordType":"CName","hostNameType":"Verified","sslState":"SniEnabled","thumbprint":"%s"}}' "$FN" "$THUMBPRINT")" \
+            >/dev/null
+          echo "  sslState now: $(az functionapp show -g "$RG" -n "$FN" --query "hostNameSslStates[?name=='${HOST}'].sslState | [0]" -o tsv)"
 
   # Admin SPA upload. Only the `admin/` static content; no backend.
   # Renders config.template.js → config.js with deploy-time values (tenant,
