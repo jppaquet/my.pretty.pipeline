@@ -68,6 +68,14 @@ workers/**/.wrangler/
 workers/**/dist/
 workers/**/node_modules/
 
+# Guard against `npm install` / `wrangler login` accidentally run from
+# the repo root (instead of `workers/email-ingest/`). The repo itself
+# isn't an npm project; root-level node_modules / package.json / lock
+# is always wrong here and pulls in ~200 MB of garbage if not caught.
+/node_modules/
+/package.json
+/package-lock.json
+
 # ── Local scratch (per-machine notes; never commit) ───────────────
 todo.md
 notes.md

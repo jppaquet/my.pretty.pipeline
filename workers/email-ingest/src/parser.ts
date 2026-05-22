@@ -3,6 +3,7 @@
 // Worker runtime.
 
 import type { Email } from "postal-mime";
+import TurndownService from "turndown";
 
 export type Classification =
   | { kind: "data"; topic: string }
@@ -72,12 +73,48 @@ export interface NotifyData {
   metadata: { fullBody: string };
 }
 
+// Reused across calls — TurndownService is stateless once configured.
+// `bulletListMarker: "-"` matches what iOS MarkdownView's unordered-list
+// classifier already recognizes (and what producers writing markdown by
+// hand tend to use). `codeBlockStyle: "fenced"` matches the iOS renderer's
+// ```-fence expectation.
+const turndown = new TurndownService({
+  bulletListMarker: "-",
+  codeBlockStyle: "fenced",
+  emDelimiter: "*",
+  headingStyle: "atx",
+});
+// Google Alerts wraps each result in `<table>` for layout; iOS doesn't
+// render markdown tables, and a table-stripped flow reads better anyway.
+// Drop `<table>` / `<thead>` / `<tbody>` / `<tr>` while keeping `<td>`
+// content; turndown's default is to emit pipe-tables which look terrible
+// when the cells are paragraphs of body text.
+turndown.remove(["style", "script"]);
+turndown.addRule("flatten-table", {
+  filter: ["table", "thead", "tbody", "tr", "td", "th"],
+  replacement: (content) => `${content}\n`,
+});
+
+// Turndown's default list output pads markers with 2-3 spaces ("- " +
+// "  item") for internal column alignment. iOS MarkdownView (see
+// `app/Notify/Features/Inbox/MarkdownView.swift`) strict-strips exactly
+// `- ` (2 chars) or `\d+\. ` (single trailing space) when classifying
+// list items, so the extra padding spills into the rendered item text.
+// Collapse to single-space markers so iOS sees what it expects.
+function normalizeListMarkers(md: string): string {
+  return md
+    .replace(/^(\s*)-\s+/gm, "$1- ")
+    .replace(/^(\s*\d+\.)\s+/gm, "$1 ");
+}
+
 export function buildPayload(topic: string, parsed: Email): NotifyData {
   const text = (parsed.text ?? "").trim();
-  // Prefer text/plain. If only text/html is present we hand the raw HTML
-  // to fullBody — the iOS markdown renderer is lenient enough that even
-  // HTML tags read as escaped angle-brackets rather than crashing the row.
-  const full = text || (parsed.html ?? "").trim();
+  const html = (parsed.html ?? "").trim();
+  // Prefer text/plain when present (cheap, faithful). When only HTML is
+  // available — the common case for Google Alerts — convert to markdown
+  // so the iOS detail view's MarkdownView renders it natively (links,
+  // bullets, emphasis) instead of showing literal `<a>` / `<li>` tags.
+  const full = text || (html ? normalizeListMarkers(turndown.turndown(html)).trim() : "");
   const summary = summarize(full, BODY_SUMMARY_MAX);
 
   return {
