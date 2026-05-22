@@ -8,9 +8,13 @@ name: CodeQL
 run-name: CodeQL · ${{ github.event_name }} · ${{ github.head_ref || github.ref_name }}
 
 # Replaces GitHub's "Default setup" for CodeQL. Default setup re-runs the full
-# autobuild (dotnet restore + build -c Release) on every push, doesn't cancel
-# stale runs, and ignores path filters — which is why a flurry of main merges
-# pinned 4 concurrent runs at 13+ minutes each.
+# autobuild on every push, doesn't cancel stale runs, ignores path filters,
+# and (worst) re-spins the macos-15 Swift runner for any code change — 15+
+# min of mostly idle waiting when you've only touched a YAML.
+#
+# This version computes a dynamic matrix: only the languages whose paths
+# changed get analyzed. Schedule runs (the weekly baseline) always cover all
+# three languages.
 #
 # IMPORTANT: before merging this PR, disable Default setup in
 #   Settings → Code security → Code scanning → CodeQL → Default setup → Disable
@@ -47,7 +51,59 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Decide which languages to analyze. Outputs a JSON `include:` array that
+  # `analyze` consumes as its matrix; an empty array short-circuits the
+  # whole job. Schedule events force all three languages on.
+  changes:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.build_matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            csharp:
+              - 'src/**'
+              - '.github/workflows/codeql.yml'
+            swift:
+              - 'app/**'
+              - '.github/workflows/codeql.yml'
+            actions:
+              - '.github/**'
+
+      - name: Build dynamic matrix
+        id: build_matrix
+        env:
+          IS_SCHEDULE: ${{ github.event_name == 'schedule' }}
+          CSHARP_CHANGED: ${{ steps.filter.outputs.csharp }}
+          SWIFT_CHANGED:  ${{ steps.filter.outputs.swift }}
+          ACTIONS_CHANGED: ${{ steps.filter.outputs.actions }}
+        run: |
+          set -eo pipefail
+          INCLUDES='[]'
+
+          if [ "$CSHARP_CHANGED" = "true" ] || [ "$IS_SCHEDULE" = "true" ]; then
+            INCLUDES=$(echo "$INCLUDES" | jq -c '. += [{"language":"csharp","runs-on":"ubuntu-24.04","build-mode":"none"}]')
+          fi
+          if [ "$SWIFT_CHANGED" = "true" ] || [ "$IS_SCHEDULE" = "true" ]; then
+            INCLUDES=$(echo "$INCLUDES" | jq -c '. += [{"language":"swift","runs-on":"macos-15","build-mode":"manual"}]')
+          fi
+          if [ "$ACTIONS_CHANGED" = "true" ] || [ "$IS_SCHEDULE" = "true" ]; then
+            INCLUDES=$(echo "$INCLUDES" | jq -c '. += [{"language":"actions","runs-on":"ubuntu-24.04","build-mode":"none"}]')
+          fi
+
+          MATRIX=$(echo "{\"include\":$INCLUDES}" | jq -c .)
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          echo "computed matrix: $MATRIX"
+
   analyze:
+    needs: changes
+    # Empty include[] = no languages to analyze; skip the whole job so we
+    # don't spin up a runner just to declare success.
+    if: needs.changes.outputs.matrix != '{"include":[]}'
     name: Analyze (${{ matrix.language }})
     runs-on: ${{ matrix.runs-on }}
     timeout-minutes: 30
@@ -58,22 +114,7 @@ jobs:
 
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          # C#: build-mode `none` analyzes source directly — CodeQL 2.16+ no
-          # longer needs `dotnet build` for SAST on .NET 5+ projects. Drops
-          # the C# analyze step from ~5 min (build + analyze) to ~30-60 s.
-          - language: csharp
-            runs-on: ubuntu-24.04
-            build-mode: none
-          # Swift requires a real Xcode build; macos-15 ships with Xcode 26.
-          - language: swift
-            runs-on: macos-15
-            build-mode: manual
-          # GitHub Actions workflow analysis — fast, source-only.
-          - language: actions
-            runs-on: ubuntu-24.04
-            build-mode: none
+      matrix: ${{ fromJSON(needs.changes.outputs.matrix) }}
 
     steps:
       - uses: actions/checkout@v6
