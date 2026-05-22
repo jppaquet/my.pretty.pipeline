@@ -43,7 +43,7 @@ the project record before verifying the key.
   "priority": "high",                 // low | normal | high (default: normal)
   "tags": ["pi-01", "backup"],        // optional, ≤10, each ≤64 chars, [A-Za-z0-9._-]; "global" reserved
   "deeplink": "https://...",          // optional, scheme ∈ {https, notify}, ≤2048 chars
-  "metadata": { "host": "pi-01" },    // optional, free-form, ≤4 KB serialized
+  "metadata": { "host": "pi-01" },    // optional, free-form, ≤32 KB serialized
                                        // Reserved key: `fullBody` (string) —
                                        // the iOS detail view renders this in
                                        // place of `body` when present, so

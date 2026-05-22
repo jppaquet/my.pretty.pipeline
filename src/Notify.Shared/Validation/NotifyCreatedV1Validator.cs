@@ -10,7 +10,13 @@ public static class NotifyCreatedV1Validator
 {
     public const int TitleMaxChars = 120;
     public const int BodyMaxChars = 2000;
-    public const int MetadataMaxBytes = 4 * 1024;
+    // 32 KB serialized. The original 4 KB was defensive without context;
+    // legit producers (Google Alerts digests via the email-ingest Worker,
+    // multi-result reports) hit that quickly when `metadata.fullBody`
+    // carries the long-form content the iOS detail view renders. APNs is
+    // unaffected (push payload never includes fullBody — see ApnsPayload.From).
+    // Cosmos per-doc limit is 2 MB, so 32 KB stays well clear.
+    public const int MetadataMaxBytes = 32 * 1024;
     public const int TagsMaxCount = 10;
     public const int TagMaxChars = 64;
     public const int DeeplinkMaxChars = 2048;
