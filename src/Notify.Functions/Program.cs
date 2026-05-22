@@ -97,7 +97,8 @@ var host = new HostBuilder()
         {
             var opts = sp.GetRequiredService<IOptions<InboxOptions>>().Value;
             var cosmos = sp.GetRequiredService<CosmosClient>();
-            return new CosmosInboxQuery(cosmos.GetContainer(opts.CosmosDatabase, opts.CosmosNotificationsContainer));
+            var logger = sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<CosmosInboxQuery>>();
+            return new CosmosInboxQuery(cosmos.GetContainer(opts.CosmosDatabase, opts.CosmosNotificationsContainer), logger);
         });
         services.AddSingleton<IInboxMutator>(sp =>
         {

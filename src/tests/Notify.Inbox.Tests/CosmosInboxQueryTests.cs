@@ -1,4 +1,5 @@
 using Microsoft.Azure.Cosmos;
+using Microsoft.Extensions.Logging.Abstractions;
 using Notify.Functions.Inbox;
 using Notify.Shared.Cosmos;
 
@@ -40,7 +41,7 @@ public class CosmosInboxQueryTests : IClassFixture<CosmosEmulatorFixture>
         var middle = Doc(UserA, "multi-a", t0.AddMinutes(-1));
         await SeedAsync(older, newer, middle);
 
-        var query = new CosmosInboxQuery(_fx.Notifications);
+        var query = new CosmosInboxQuery(_fx.Notifications, NullLogger<CosmosInboxQuery>.Instance);
         var page = await query.QueryAsync(userId: UserA, source: null, limit: 50, continuationToken: null);
 
         var byOurSources = page.Items.Where(d => d.Source.StartsWith("multi-", StringComparison.Ordinal)).ToList();
@@ -58,7 +59,7 @@ public class CosmosInboxQueryTests : IClassFixture<CosmosEmulatorFixture>
             Doc(UserA, "tenant-a", t0),
             Doc(UserB, "tenant-a", t0));
 
-        var query = new CosmosInboxQuery(_fx.Notifications);
+        var query = new CosmosInboxQuery(_fx.Notifications, NullLogger<CosmosInboxQuery>.Instance);
         var page = await query.QueryAsync(userId: UserA, source: "tenant-a", limit: 50, continuationToken: null);
 
         var doc = Assert.Single(page.Items);
@@ -73,7 +74,7 @@ public class CosmosInboxQueryTests : IClassFixture<CosmosEmulatorFixture>
             Doc(UserA, "filter-a", t0),
             Doc(UserA, "filter-b", t0));
 
-        var query = new CosmosInboxQuery(_fx.Notifications);
+        var query = new CosmosInboxQuery(_fx.Notifications, NullLogger<CosmosInboxQuery>.Instance);
         var page = await query.QueryAsync(userId: UserA, source: "filter-a", limit: 50, continuationToken: null);
 
         var doc = Assert.Single(page.Items);
@@ -89,7 +90,7 @@ public class CosmosInboxQueryTests : IClassFixture<CosmosEmulatorFixture>
             Doc(UserA, "page-a", t0.AddSeconds(-2)),
             Doc(UserA, "page-a", t0.AddSeconds(-1)));
 
-        var query = new CosmosInboxQuery(_fx.Notifications);
+        var query = new CosmosInboxQuery(_fx.Notifications, NullLogger<CosmosInboxQuery>.Instance);
         var first = await query.QueryAsync(userId: UserA, source: "page-a", limit: 1, continuationToken: null);
 
         Assert.Single(first.Items);
