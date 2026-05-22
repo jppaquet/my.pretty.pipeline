@@ -126,7 +126,13 @@ async function postToIngest(env: Env, data: NotifyData, ctx: { from: string; sub
       "x-api-key": env.INGEST_API_KEY,
       "ce-specversion": "1.0",
       "ce-type": CE_TYPE,
-      "ce-source": `urn:notify:${env.PRODUCER_ID}`,
+      // Bare projectId — Ingest looks up `projects/<source>` directly.
+      // The `urn:notify:<id>` form is what Ingest stamps on the
+      // CloudEvent before publishing to Event Grid downstream, NOT
+      // what producers send as input. Verified empirically on the
+      // dev RG: posting source="urn:notify:google-alerts" returned
+      // 401 (project not found), source="google-alerts" returned 202.
+      "ce-source": env.PRODUCER_ID,
       "ce-id": id,
       "ce-time": time,
     },
