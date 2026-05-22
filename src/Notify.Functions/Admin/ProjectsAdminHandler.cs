@@ -89,6 +89,54 @@ public sealed partial class ProjectsAdminHandler
             new ProjectSummary(projectId, displayName, true), key);
     }
 
+    // Generates a fresh salt + key + hash on an existing project, preserving
+    // id / projectId / displayName / active. The new cleartext is returned
+    // exactly once (just like Mint). After this call, the previous key no
+    // longer verifies — the hash on disk is replaced, not appended — which
+    // is what makes this a real rotation rather than "issue a parallel key."
+    //
+    // Active state is intentionally preserved. Rotating a revoked project
+    // gives you a fresh inert key (still gated by IngestHandler's
+    // `!project.Active` short-circuit); the operator stages it, then
+    // unrevokes when they want it live. Mixing rotate + unrevoke into one
+    // action would make audit reasoning harder ("did this key get used
+    // while revoked?") for no real ergonomic gain.
+    public async Task<ProjectMutationResult> RotateAsync(string projectId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(projectId))
+            return new ProjectMutationResult.InvalidInput("projectId", "missing");
+
+        ProjectDocument current;
+        try
+        {
+            var read = await _projects.ReadItemAsync<ProjectDocument>(
+                projectId, new PartitionKey(projectId), cancellationToken: ct);
+            current = read.Resource;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            return new ProjectMutationResult.NotFound();
+        }
+
+        var key = ProjectKeyGenerator.Mint();
+        var salt = ApiKeyHasher.NewSalt();
+        var hash = _hasher.Hash(key, salt);
+
+        var updated = new ProjectDocument
+        {
+            Id = current.Id,
+            ProjectId = current.ProjectId,
+            DisplayName = current.DisplayName,
+            SaltBase64 = Convert.ToBase64String(salt),
+            KeyHashBase64 = Convert.ToBase64String(hash),
+            Active = current.Active,
+        };
+        await _projects.ReplaceItemAsync(updated, projectId, new PartitionKey(projectId), cancellationToken: ct);
+
+        return new ProjectMutationResult.OkWithKey(
+            new ProjectSummary(updated.ProjectId, updated.DisplayName, updated.Active), key);
+    }
+
     public async Task<ProjectMutationResult> RevokeAsync(string projectId, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(projectId))

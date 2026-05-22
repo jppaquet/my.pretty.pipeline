@@ -161,9 +161,11 @@
       </div>
       <span id="mint-error" class="status error"></span>
     </div>
+    <!-- Reused for both mint and rotate — the heading + warning text
+         are swapped in JS so the same DOM serves both flows. -->
     <div id="mint-result-step" hidden>
-      <h2>key minted ✓</h2>
-      <p class="muted">copy this key now — it will <strong>not be shown again</strong>. losing it means re-minting the project.</p>
+      <h2 id="mint-result-heading">key minted ✓</h2>
+      <p class="muted" id="mint-result-warning">copy this key now — it will <strong>not be shown again</strong>. losing it means re-minting the project.</p>
       <div class="key-display">
         <code id="mint-key-value"></code>
         <button id="mint-copy-btn" type="button">copy</button>
