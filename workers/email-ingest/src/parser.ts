@@ -3,7 +3,7 @@
 // Worker runtime.
 
 import type { Email } from "postal-mime";
-import TurndownService from "turndown";
+import { NodeHtmlMarkdown } from "node-html-markdown";
 
 export type Classification =
   | { kind: "data"; topic: string }
@@ -73,38 +73,35 @@ export interface NotifyData {
   metadata: { fullBody: string };
 }
 
-// Reused across calls — TurndownService is stateless once configured.
-// `bulletListMarker: "-"` matches what iOS MarkdownView's unordered-list
-// classifier already recognizes (and what producers writing markdown by
-// hand tend to use). `codeBlockStyle: "fenced"` matches the iOS renderer's
-// ```-fence expectation.
-const turndown = new TurndownService({
-  bulletListMarker: "-",
+// `node-html-markdown` (NHM) replaced turndown after turndown crashed
+// in the CF Workers runtime with `ReferenceError: document is not
+// defined`. Turndown's HTML parser leans on a real DOM (resolved via
+// `@mixmark-io/domino` in Node, the global `document` in browsers).
+// CF Workers' V8 isolate exposes neither, so the parser blew up at
+// first invocation. NHM parses HTML via `node-html-parser`, a pure
+// JS tokenizer with no DOM dependency — works everywhere.
+//
+// Bullet/heading options match what iOS MarkdownView's classifier
+// recognizes (single-space `- ` markers, atx-style headings).
+const htmlToMarkdown = new NodeHtmlMarkdown({
+  bulletMarker: "-",
   codeBlockStyle: "fenced",
   emDelimiter: "*",
-  headingStyle: "atx",
-});
-// Google Alerts wraps each result in `<table>` for layout; iOS doesn't
-// render markdown tables, and a table-stripped flow reads better anyway.
-// Drop `<table>` / `<thead>` / `<tbody>` / `<tr>` while keeping `<td>`
-// content; turndown's default is to emit pipe-tables which look terrible
-// when the cells are paragraphs of body text.
-turndown.remove(["style", "script"]);
-turndown.addRule("flatten-table", {
-  filter: ["table", "thead", "tbody", "tr", "td", "th"],
-  replacement: (content) => `${content}\n`,
+  strongDelimiter: "**",
 });
 
-// Turndown's default list output pads markers with 2-3 spaces ("- " +
-// "  item") for internal column alignment. iOS MarkdownView (see
-// `app/Notify/Features/Inbox/MarkdownView.swift`) strict-strips exactly
-// `- ` (2 chars) or `\d+\. ` (single trailing space) when classifying
-// list items, so the extra padding spills into the rendered item text.
-// Collapse to single-space markers so iOS sees what it expects.
-function normalizeListMarkers(md: string): string {
-  return md
-    .replace(/^(\s*)-\s+/gm, "$1- ")
-    .replace(/^(\s*\d+\.)\s+/gm, "$1 ");
+// Pre-strip layout wrappers + script/style blocks before NHM parses
+// the HTML. Google Alerts wraps each result in `<table>` for visual
+// layout; NHM's default would emit a pipe-style markdown table which
+// reads terribly when the cells are full paragraphs (and iOS doesn't
+// render markdown tables anyway). `<style>` and `<script>` need to
+// be removed wholesale, not just stripped of their tags, so we delete
+// the entire block.
+function preprocessHtml(html: string): string {
+  return html
+    .replace(/<style\b[\s\S]*?<\/style>/gi, "")
+    .replace(/<script\b[\s\S]*?<\/script>/gi, "")
+    .replace(/<\/?(table|thead|tbody|tfoot|tr|td|th)\b[^>]*>/gi, " ");
 }
 
 export function buildPayload(topic: string, parsed: Email): NotifyData {
@@ -114,10 +111,10 @@ export function buildPayload(topic: string, parsed: Email): NotifyData {
   // emails include BOTH parts in the MIME multipart: the text/plain
   // version is decorative-sparse (just titles wrapped in `=== … ===`
   // separators + URLs, ~10× shorter than the HTML), and using it
-  // leaves the iOS detail view looking truncated. HTML → turndown
-  // markdown yields the full digest with links, snippets, and
-  // emphasis intact. Fall back to text/plain only when HTML is absent.
-  const fromHtml = html ? normalizeListMarkers(turndown.turndown(html)).trim() : "";
+  // leaves the iOS detail view looking truncated. HTML → NHM markdown
+  // yields the full digest with links, snippets, and emphasis intact.
+  // Fall back to text/plain only when HTML is absent.
+  const fromHtml = html ? htmlToMarkdown.translate(preprocessHtml(html)).trim() : "";
   const full = fromHtml || text;
   const summary = summarize(full, BODY_SUMMARY_MAX);
 
