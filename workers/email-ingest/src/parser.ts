@@ -206,9 +206,31 @@ export function truncate(s: string, limit: number): string {
   return window.slice(0, cutoff) + "…";
 }
 
-// Body summary = first paragraph (or first ~1800 chars if it's all
-// one wall). Truncate is the final guard.
+// Smallest paragraph length that we consider "substantive" — anything
+// shorter is treated as a header / logo alt-text / link line and
+// skipped over while looking for real content. Tuned against the
+// shape of Google Alerts emails:
+//   `Google Microsoft` (logo alt + topic, ~16 chars)
+//   `Microsoft news`   (section header, ~15 chars)
+//   `Result snippet…`  (the real content, easily 80+ chars)
+const SUMMARY_MIN_PARA = 50;
+
+// Body summary for the push banner + inbox row preview. Splits the
+// post-markdown-strip text into paragraphs, skips leading short ones
+// (logos, headers, alt-text lines that survive stripMarkdownToPlain
+// as tiny fragments), then joins everything from the first
+// substantive paragraph onward into a single flowing string and
+// truncates. Falls back to the whole text when no paragraph clears
+// the threshold (short alerts, plain-text producers).
 export function summarize(text: string, limit: number): string {
-  const firstPara = text.split(/\n\s*\n/, 1)[0] ?? text;
-  return truncate(firstPara.replace(/\s+/g, " ").trim(), limit);
+  const paragraphs = text.split(/\n\s*\n/);
+  const normalize = (s: string) => s.replace(/\s+/g, " ").trim();
+
+  let firstSubstantive = paragraphs.findIndex(
+    (p) => normalize(p).length >= SUMMARY_MIN_PARA,
+  );
+  if (firstSubstantive < 0) firstSubstantive = 0;
+
+  const joined = normalize(paragraphs.slice(firstSubstantive).join(" "));
+  return truncate(joined, limit);
 }
