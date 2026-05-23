@@ -1,4 +1,5 @@
 import SwiftUI
+import UserNotifications
 
 struct InboxView: View {
     @Bindable var viewModel: InboxViewModel
@@ -58,9 +59,11 @@ struct InboxView: View {
                                     }
                                 }
                             } header: {
+                                let unreadIds = section.items.compactMap { $0.isRead == true ? nil : $0.id }
                                 CollapsibleHeader(
                                     title: section.header,
                                     count: section.items.count,
+                                    unreadCount: unreadIds.count,
                                     isCollapsed: collapsedSections.contains(section.id),
                                     toggle: {
                                         withAnimation(.easeInOut(duration: 0.18)) {
@@ -70,6 +73,9 @@ struct InboxView: View {
                                                 collapsedSections.insert(section.id)
                                             }
                                         }
+                                    },
+                                    markAllRead: unreadIds.isEmpty ? nil : {
+                                        Task { await viewModel.markAllRead(ids: unreadIds) }
                                     }
                                 )
                                 .accessibilityIdentifier("inbox.section.\(section.id)")
@@ -120,6 +126,16 @@ struct InboxView: View {
             }
         }
         .task { if case .idle = viewModel.state { await viewModel.load() } }
+        // App icon badge mirrors the unread count. We update on every
+        // state transition that can change the count (load / refresh /
+        // markRead / markAllRead / delete / loadMore). The badge
+        // authorization is requested alongside .alert + .sound in
+        // PushRegistration.requestAuthorization, so failures here are
+        // silent if the user denied that flag specifically — better
+        // than surfacing a banner for a system-level UX detail.
+        .onChange(of: viewModel.unreadCount, initial: true) { _, newCount in
+            UNUserNotificationCenter.current().setBadgeCount(newCount) { _ in }
+        }
     }
 }
 
@@ -239,16 +255,21 @@ private struct SectionData: Identifiable {
     var id: String { header }
 }
 
-// Tappable section header for the grouped-list views. Renders the title +
-// row count on the left and a chevron on the right that rotates when the
-// section is collapsed. Button(.plain) on the whole row gives a sane
-// touch target while keeping the visual identical to a default Section
-// header on iOS.
+// Tappable section header for the grouped-list views. Title + row count
+// on the left, a chevron on the right that rotates when collapsed. The
+// chevron lives in a Button(.plain) wrapping the whole row for a sane
+// touch target. When the section has any unread item, a small
+// "envelope.open" button shows up between the title and the chevron —
+// tapping it marks every unread item in the section as read in one
+// pass (see InboxViewModel.markAllRead). The button uses BorderlessButtonStyle
+// so SwiftUI doesn't conflict its hit-zone with the surrounding row Button.
 private struct CollapsibleHeader: View {
     let title: String
     let count: Int
+    let unreadCount: Int
     let isCollapsed: Bool
     let toggle: () -> Void
+    let markAllRead: (() -> Void)?
 
     var body: some View {
         Button(action: toggle) {
@@ -258,6 +279,16 @@ private struct CollapsibleHeader: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
+                if let markAllRead, unreadCount > 0 {
+                    Button(action: markAllRead) {
+                        Label("Mark all read (\(unreadCount))", systemImage: "envelope.open")
+                            .labelStyle(.iconOnly)
+                            .font(.callout)
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("Mark all read")
+                    .accessibilityIdentifier("inbox.section.markAllRead")
+                }
                 Image(systemName: "chevron.down")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)

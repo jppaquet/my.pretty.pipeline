@@ -161,6 +161,61 @@ final class InboxViewModelTests: XCTestCase {
         XCTAssertEqual(api.markReadCalls.count, 0)
     }
 
+    func testMarkAllReadFlipsEveryUnreadInTheBatchAndPostsOnePerUnread() async {
+        let api = MockNotifyAPI()
+        let first = sample("home", offsetSeconds: 0)
+        let second = sample("home", offsetSeconds: 1)
+        var alreadyRead = sample("home", offsetSeconds: 2)
+        alreadyRead.isRead = true // already-read row in the batch — should not POST
+        api.pages = [InboxPage(items: [first, second, alreadyRead], continuationToken: nil)]
+
+        let vm = InboxViewModel(api: api)
+        await vm.load()
+        await vm.markAllRead(ids: [first.id, second.id, alreadyRead.id])
+
+        guard case .loaded(let items, _) = vm.state else {
+            return XCTFail("Expected .loaded, got \(vm.state)")
+        }
+        XCTAssertTrue(items.allSatisfy { $0.isRead == true })
+        XCTAssertEqual(api.markReadCalls.count, 2, "should only POST for the two previously-unread rows")
+        XCTAssertEqual(Set(api.markReadCalls.map { $0.id }), Set([first.id, second.id]))
+    }
+
+    func testMarkAllReadNoopWhenEveryItemAlreadyRead() async {
+        let api = MockNotifyAPI()
+        var first = sample("home", offsetSeconds: 0)
+        var second = sample("home", offsetSeconds: 1)
+        first.isRead = true
+        second.isRead = true
+        api.pages = [InboxPage(items: [first, second], continuationToken: nil)]
+
+        let vm = InboxViewModel(api: api)
+        await vm.load()
+        await vm.markAllRead(ids: [first.id, second.id])
+
+        XCTAssertEqual(api.markReadCalls.count, 0)
+    }
+
+    func testUnreadCountReflectsLoadedItems() async {
+        let api = MockNotifyAPI()
+        var read = sample("home", offsetSeconds: 0)
+        read.isRead = true
+        let unread1 = sample("home", offsetSeconds: 1)
+        let unread2 = sample("home", offsetSeconds: 2)
+        api.pages = [InboxPage(items: [read, unread1, unread2], continuationToken: nil)]
+
+        let vm = InboxViewModel(api: api)
+        XCTAssertEqual(vm.unreadCount, 0, "idle state has no unread")
+        await vm.load()
+        XCTAssertEqual(vm.unreadCount, 2)
+
+        await vm.markRead(id: unread1.id)
+        XCTAssertEqual(vm.unreadCount, 1)
+
+        await vm.markAllRead(ids: [unread2.id])
+        XCTAssertEqual(vm.unreadCount, 0)
+    }
+
     func testDeleteRemovesLocalAndCallsAPI() async {
         let api = MockNotifyAPI()
         let target = sample("home", offsetSeconds: 0)
