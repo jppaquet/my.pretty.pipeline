@@ -83,9 +83,13 @@ final class InboxViewModel {
     }
 
     // Flip every unread item in `ids` to read, in one state update so the
-    // UI redraws once. POSTs go out in parallel — `markInboxRead` is
-    // already idempotent + best-effort. Used by the "mark all read"
-    // button on a grouped section header.
+    // UI redraws once. POSTs go out sequentially — the earlier parallel
+    // TaskGroup version raced against MockNotifyAPI's non-thread-safe
+    // `markReadCalls.append` in the unit suite (CI failure on iPad Pro
+    // 13-inch (M4), `testMarkAllReadFlipsEveryUnreadInTheBatchAndPostsOnePerUnread`
+    // saw 1 entry instead of 2). `markInboxRead` is idempotent +
+    // best-effort, and a section batch caps at ~pageSize (50), so a
+    // sequential loop costs at most ~2.5 s on a deliberate user tap.
     func markAllRead(ids: [InboxNotification.ID]) async {
         guard case .loaded(var items, let token) = state else { return }
         var toPost: [(id: String, source: String)] = []
@@ -97,12 +101,8 @@ final class InboxViewModel {
         }
         guard !toPost.isEmpty else { return }
         state = .loaded(items: items, continuationToken: token)
-        await withTaskGroup(of: Void.self) { group in
-            for entry in toPost {
-                group.addTask { [api] in
-                    try? await api.markInboxRead(id: entry.id, source: entry.source)
-                }
-            }
+        for entry in toPost {
+            try? await api.markInboxRead(id: entry.id, source: entry.source)
         }
     }
 
