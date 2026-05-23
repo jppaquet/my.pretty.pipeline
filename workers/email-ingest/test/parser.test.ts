@@ -103,9 +103,35 @@ describe("truncate", () => {
 });
 
 describe("summarize", () => {
-  it("returns the first paragraph when shorter than the limit", () => {
-    const input = "first paragraph here\n\nsecond paragraph way longer than the first one";
-    expect(summarize(input, 100)).toBe("first paragraph here");
+  it("joins from the first substantive paragraph onward", () => {
+    const longFirst = "This first paragraph has well over fifty characters of content all on its own.";
+    const input = `${longFirst}\n\nsecond paragraph`;
+    // Substantive starts at index 0 — join everything from there.
+    expect(summarize(input, 200)).toBe(`${longFirst} second paragraph`);
+  });
+
+  it("skips leading short paragraphs (logos / topic headers) and joins from the first substantive one", () => {
+    // Mirrors the shape of a real Google Alerts body after
+    // stripMarkdownToPlain: a logo alt-text + topic header + the
+    // actual snippet. The user-facing summary should jump past the
+    // first two short paragraphs and start at the real content.
+    const input = [
+      "Google",                                                    // alt-text from a logo, 6 chars
+      "Microsoft",                                                 // topic name, 9 chars
+      "Microsoft announced today a new partnership with " +        // real snippet, > 50 chars
+        "Anthropic to bring Claude models to enterprise customers.",
+      "Read more at example.com",                                  // tail, < 50 chars but reachable via join
+    ].join("\n\n");
+    const out = summarize(input, 500);
+    expect(out.startsWith("Microsoft announced today")).toBe(true);
+    expect(out).toContain("partnership with Anthropic");
+    expect(out).toContain("Read more at example.com");
+    expect(out).not.toMatch(/^Google\b/);
+  });
+
+  it("falls back to the whole text when no paragraph clears the substantive threshold", () => {
+    const input = "short\n\nbits\n\nonly";
+    expect(summarize(input, 100)).toBe("short bits only");
   });
 
   it("truncates a wall-of-text body with no paragraph breaks", () => {
