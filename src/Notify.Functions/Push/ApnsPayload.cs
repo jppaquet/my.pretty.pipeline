@@ -6,10 +6,26 @@ using Notify.Shared.Json;
 namespace Notify.Functions.Push;
 
 // APNs payload + apns-priority header bundle. Built from a NotifyCreatedV1.
-// We don't truncate the body here — the validator caps at 2 KB which is
-// already well under APNs' 4 KB total payload limit, and we want producers
-// to see oversize as a 400 from IngestionApi rather than silent truncation
-// downstream.
+//
+// APNs has a hard 4 KB limit on the total payload. Body alone is bounded
+// at 2 KB by the validator (BodyMaxChars), which leaves comfortable
+// headroom for the wrapper + identifiers when only `body` is carried.
+//
+// `metadata` is intentionally NOT included here. The schema's `metadata`
+// field (e.g. `fullBody` for long-form digest content) is sized to the
+// inbox API contract (32 KB cap, per #160) — way over the 4 KB APNs
+// limit. Pre-#160 this worked because metadata was capped at 4 KB; now
+// stuffing it into the push payload trips
+//   `Microsoft.Azure.NotificationHubs.Messaging.BadRequestException:
+//    Notification payload is too large. Actual Length: 'NNNN' and
+//    Max Allowed Length: '4096'`
+// on every Google Alert with a real-size digest, dropping the user's push.
+//
+// The iOS app reads metadata.fullBody from the inbox API on open / via
+// the inbox refresh — it doesn't need the metadata in the push payload.
+// The push payload's job is the lock-screen banner (title + body), the
+// deeplink, and the keys the app uses to route the tap (id, source,
+// type). All bounded; sum well under 4 KB.
 public sealed record ApnsPayload(string Json, int ApnsPriority)
 {
     public static ApnsPayload From(NotifyCreatedV1 message)
@@ -34,9 +50,6 @@ public sealed record ApnsPayload(string Json, int ApnsPriority)
 
         if (!string.IsNullOrEmpty(message.Deeplink))
             root["deeplink"] = message.Deeplink;
-
-        if (message.Metadata is not null && message.Metadata.Count > 0)
-            root["metadata"] = message.Metadata;
 
         var json = JsonSerializer.Serialize(root, NotifyJson.Options);
         return new ApnsPayload(json, message.Priority.ToApnsPriority());
