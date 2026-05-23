@@ -90,6 +90,90 @@ const htmlToMarkdown = new NodeHtmlMarkdown({
   strongDelimiter: "**",
 });
 
+// Google Alerts embeds a Schema.org "inbox markup" JSON block inside
+// the HTML — the same payload Gmail uses to render its in-thread
+// action card. Shape (only the fields we read):
+//
+//   <script data-scope="inboxmarkup" type="application/json">
+//   {
+//     "entity":  { "title": "Google Alert - Anthropic", "subtitle": "Latest: …" },
+//     "updates": { "snippets": [ { "message": "…" }, … ] },
+//     "cards":   [ { "widgets": [
+//        { "type": "LINK", "title": "…", "description": "…", "url": "…" },
+//        …
+//     ] } ]
+//   }
+//   </script>
+//
+// This is dramatically cleaner than scraping the layout-table HTML: each
+// widget is already title/description/url with no decorative noise (no
+// "Flag as irrelevant" / "Full Coverage" / share-button alt text / etc.).
+// preprocessHtml() strips <script> blocks before NHM sees them, so
+// extraction must happen before that path runs.
+interface InboxMarkupWidget {
+  type?: string;
+  title?: string;
+  description?: string;
+  url?: string;
+}
+interface InboxMarkup {
+  entity?: { title?: string; subtitle?: string };
+  updates?: { snippets?: { message?: string }[] };
+  cards?: { widgets?: InboxMarkupWidget[] }[];
+}
+
+export function extractInboxMarkup(html: string): InboxMarkup | null {
+  // Match the script block by its `data-scope="inboxmarkup"` attribute,
+  // tolerant of attribute order and single/double quotes.
+  const re =
+    /<script\b[^>]*data-scope\s*=\s*["']inboxmarkup["'][^>]*>([\s\S]*?)<\/script>/i;
+  const match = html.match(re);
+  if (!match) return null;
+  try {
+    return JSON.parse(match[1]) as InboxMarkup;
+  } catch {
+    return null;
+  }
+}
+
+// Renders the inbox-markup JSON as the same flavor of markdown NHM
+// produces, so the downstream summarize / fullBody path doesn't need
+// to know which source built the string. Each LINK widget becomes:
+//
+//   **[Title](url)**
+//   description
+//
+// separated by blank lines. When `cards[].widgets[]` is empty but
+// `updates.snippets[]` has items (terse alert variants), each snippet
+// becomes a `- message` bullet line.
+export function renderFromInboxMarkup(markup: InboxMarkup): string {
+  const parts: string[] = [];
+  const widgets = (markup.cards ?? [])
+    .flatMap((c) => c.widgets ?? [])
+    .filter((w) => w.type === "LINK" && (w.title || w.description));
+
+  for (const w of widgets) {
+    const title = (w.title ?? "").trim();
+    const desc = (w.description ?? "").trim();
+    const url = (w.url ?? "").trim();
+    const lines: string[] = [];
+    if (title && url) lines.push(`**[${title}](${url})**`);
+    else if (title) lines.push(`**${title}**`);
+    if (desc) lines.push(desc);
+    if (lines.length > 0) parts.push(lines.join("\n"));
+  }
+
+  if (parts.length === 0) {
+    const snippets = markup.updates?.snippets ?? [];
+    for (const s of snippets) {
+      const m = (s.message ?? "").trim();
+      if (m) parts.push(`- ${m}`);
+    }
+  }
+
+  return parts.join("\n\n").trim();
+}
+
 // Pre-strip layout wrappers + script/style blocks before NHM parses
 // the HTML. Google Alerts wraps each result in `<table>` for visual
 // layout; NHM's default would emit a pipe-style markdown table which
@@ -166,15 +250,24 @@ export function stripMarkdownToPlain(md: string): string {
 export function buildPayload(topic: string, parsed: Email): NotifyData {
   const text = (parsed.text ?? "").trim();
   const html = (parsed.html ?? "").trim();
-  // Prefer the HTML-converted markdown when present. Google Alerts
-  // emails include BOTH parts in the MIME multipart: the text/plain
-  // version is decorative-sparse (just titles wrapped in `=== … ===`
-  // separators + URLs, ~10× shorter than the HTML), and using it
-  // leaves the iOS detail view looking truncated. HTML → NHM markdown
-  // yields the full digest with links, snippets, and emphasis intact.
-  // Fall back to text/plain only when HTML is absent.
-  const fromHtml = html ? htmlToMarkdown.translate(preprocessHtml(html)).trim() : "";
-  const full = fromHtml || text;
+  // Three-tier source preference for the body:
+  //   1. The Schema.org inbox-markup JSON Google embeds in the HTML
+  //      — pre-cleaned title/description/url per result, no layout
+  //      noise. This is the high-fidelity path.
+  //   2. HTML → NHM markdown — fallback when the JSON block is
+  //      absent (other producers, or if Google ever changes the
+  //      schema). Carries the full digest at the cost of some
+  //      residual layout artifacts.
+  //   3. text/plain — last-resort fallback. Google Alerts' text part
+  //      is decorative-sparse (`=== … ===` separators + raw URLs)
+  //      and lacks the snippets, so we only use it when HTML is
+  //      absent entirely.
+  const markup = html ? extractInboxMarkup(html) : null;
+  const fromMarkup = markup ? renderFromInboxMarkup(markup) : "";
+  const fromHtml = !fromMarkup && html
+    ? htmlToMarkdown.translate(preprocessHtml(html)).trim()
+    : "";
+  const full = fromMarkup || fromHtml || text;
   // The push banner renders body as plain text — markdown syntax
   // (`[link](url)`, `**bold**`, leading `#`/`-`) shows up literally on
   // the lock-screen otherwise. Strip syntax before summarize so the

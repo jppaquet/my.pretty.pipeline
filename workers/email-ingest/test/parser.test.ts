@@ -5,7 +5,9 @@ import {
   TITLE_MAX,
   buildPayload,
   classify,
+  extractInboxMarkup,
   isAuthenticated,
+  renderFromInboxMarkup,
   stripMarkdownToPlain,
   summarize,
   truncate,
@@ -318,5 +320,147 @@ describe("buildPayload", () => {
     const out = buildPayload(longTopic, email);
     expect(out.title.length).toBeLessThanOrEqual(TITLE_MAX);
     expect(out.title.startsWith("Google Alert -")).toBe(true);
+  });
+
+  it("prefers Google's inbox-markup JSON over the surrounding HTML when both are present", () => {
+    // Mirrors the real Google Alerts shape: the `<script data-scope="inboxmarkup">`
+    // block carries clean structured data; the surrounding HTML repeats the
+    // same info wrapped in layout-table noise (social-share buttons, "Flag
+    // as irrelevant" lines, "Full Coverage" links). We want the JSON
+    // path to win — it's higher fidelity and skips the noise.
+    const inboxMarkup = {
+      api_version: "1.0",
+      entity: { title: "Google Alert - Anthropic" },
+      cards: [{
+        widgets: [
+          {
+            type: "LINK",
+            title: "Anthropic rents Colossus 1 for $1.25B/month",
+            description: "Anthropic has just signed a $1.25 billion per month contract until May 2029.",
+            url: "https://www.google.com/url?rct=j&url=https://example.com/article-1",
+          },
+          {
+            type: "LINK",
+            title: "Anthropic dropped Claude Skills",
+            description: "A walkthrough of the 31 Skills released this week.",
+            url: "https://www.google.com/url?rct=j&url=https://example.com/article-2",
+          },
+        ],
+      }],
+    };
+    const html = `<html><body>
+      <script data-scope="inboxmarkup" type="application/json">${JSON.stringify(inboxMarkup)}</script>
+      <table><tr><td>
+        <h3><a href="https://example.com/decorative">Flag as irrelevant</a></h3>
+        <p>Share on Facebook | Twitter | RSS feed of this alert</p>
+      </td></tr></table>
+    </body></html>`;
+    const out = buildPayload("Anthropic", mkEmail({ text: "", html }));
+
+    expect(out.metadata.fullBody).toMatch(/\[Anthropic rents Colossus 1 for \$1\.25B\/month\]/);
+    expect(out.metadata.fullBody).toContain("$1.25 billion per month contract until May 2029");
+    expect(out.metadata.fullBody).toMatch(/\[Anthropic dropped Claude Skills\]/);
+    expect(out.metadata.fullBody).toContain("31 Skills released this week");
+    // None of the decorative HTML leaks through.
+    expect(out.metadata.fullBody).not.toContain("Flag as irrelevant");
+    expect(out.metadata.fullBody).not.toContain("Share on Facebook");
+    // Body summary is plain — no markdown syntax — and contains the
+    // real snippet content from the first widget.
+    expect(out.body).not.toMatch(/[\[\]()*_`#>]/);
+    expect(out.body).toContain("Anthropic rents Colossus 1");
+    expect(out.body).toContain("$1.25 billion per month");
+  });
+
+  it("falls back to NHM HTML→markdown when the inbox-markup script is malformed", () => {
+    // JSON.parse throws → extractInboxMarkup returns null → buildPayload
+    // walks down to the HTML path. Smoke test that we don't blow up on
+    // bad JSON inside the script tag.
+    const html = `<html><body>
+      <script data-scope="inboxmarkup" type="application/json">{not valid json</script>
+      <p>Visible HTML body.</p>
+    </body></html>`;
+    const out = buildPayload("topic", mkEmail({ text: "", html }));
+    expect(out.metadata.fullBody).toContain("Visible HTML body.");
+  });
+});
+
+describe("extractInboxMarkup", () => {
+  it("returns null when the script tag is absent", () => {
+    expect(extractInboxMarkup("<html><body><p>nothing here</p></body></html>")).toBeNull();
+  });
+
+  it("returns null when the script tag is present but JSON is malformed", () => {
+    const html = `<script data-scope="inboxmarkup" type="application/json">{nope}</script>`;
+    expect(extractInboxMarkup(html)).toBeNull();
+  });
+
+  it("parses the JSON when the script tag is present", () => {
+    const html = `<script data-scope="inboxmarkup" type="application/json">{"entity":{"title":"x"}}</script>`;
+    expect(extractInboxMarkup(html)?.entity?.title).toBe("x");
+  });
+
+  it("tolerates single-quoted attributes and attribute reordering", () => {
+    const html = `<script type='application/json' data-scope='inboxmarkup'>{"entity":{"title":"x"}}</script>`;
+    expect(extractInboxMarkup(html)?.entity?.title).toBe("x");
+  });
+
+  it("only matches scripts scoped to inboxmarkup (ignores other JSON scripts)", () => {
+    const html =
+      `<script type="application/json" data-scope="something-else">{"a":1}</script>` +
+      `<script data-scope="inboxmarkup" type="application/json">{"entity":{"title":"yes"}}</script>`;
+    expect(extractInboxMarkup(html)?.entity?.title).toBe("yes");
+  });
+});
+
+describe("renderFromInboxMarkup", () => {
+  it("emits a bold-linked title plus description per LINK widget", () => {
+    const out = renderFromInboxMarkup({
+      cards: [{
+        widgets: [
+          { type: "LINK", title: "First", description: "First snippet.", url: "https://example.com/1" },
+          { type: "LINK", title: "Second", description: "Second snippet.", url: "https://example.com/2" },
+        ],
+      }],
+    });
+    expect(out).toContain("**[First](https://example.com/1)**\nFirst snippet.");
+    expect(out).toContain("**[Second](https://example.com/2)**\nSecond snippet.");
+    // Widgets separated by a blank line.
+    expect(out).toMatch(/First snippet\.\n\n\*\*\[Second\]/);
+  });
+
+  it("skips widgets whose type isn't LINK and widgets missing both title and description", () => {
+    const out = renderFromInboxMarkup({
+      cards: [{
+        widgets: [
+          { type: "IMAGE", title: "Decorative" },
+          { type: "LINK", title: "", description: "", url: "https://example.com/empty" },
+          { type: "LINK", title: "Kept", description: "Kept snippet.", url: "https://example.com/kept" },
+        ],
+      }],
+    });
+    expect(out).toContain("Kept");
+    expect(out).not.toContain("Decorative");
+    expect(out).not.toContain("empty");
+  });
+
+  it("falls back to updates.snippets as bullet list when no widgets are present", () => {
+    const out = renderFromInboxMarkup({
+      updates: { snippets: [{ message: "snippet one" }, { message: "snippet two" }] },
+    });
+    expect(out).toBe("- snippet one\n\n- snippet two");
+  });
+
+  it("returns an empty string for an empty markup payload", () => {
+    expect(renderFromInboxMarkup({})).toBe("");
+    expect(renderFromInboxMarkup({ cards: [] })).toBe("");
+    expect(renderFromInboxMarkup({ cards: [{ widgets: [] }] })).toBe("");
+  });
+
+  it("handles widgets with title but no url (emits **title** without a link)", () => {
+    const out = renderFromInboxMarkup({
+      cards: [{ widgets: [{ type: "LINK", title: "No URL here", description: "Snippet." }] }],
+    });
+    expect(out).toContain("**No URL here**\nSnippet.");
+    expect(out).not.toContain("[No URL here]");
   });
 });
