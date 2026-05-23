@@ -82,6 +82,38 @@ final class InboxViewModel {
         try? await api.markInboxRead(id: id, source: source)
     }
 
+    // Flip every unread item in `ids` to read, in one state update so the
+    // UI redraws once. POSTs go out in parallel — `markInboxRead` is
+    // already idempotent + best-effort. Used by the "mark all read"
+    // button on a grouped section header.
+    func markAllRead(ids: [InboxNotification.ID]) async {
+        guard case .loaded(var items, let token) = state else { return }
+        var toPost: [(id: String, source: String)] = []
+        for id in ids {
+            guard let idx = items.firstIndex(where: { $0.id == id }) else { continue }
+            guard items[idx].isRead != true else { continue }
+            items[idx].isRead = true
+            toPost.append((id: items[idx].id, source: items[idx].source))
+        }
+        guard !toPost.isEmpty else { return }
+        state = .loaded(items: items, continuationToken: token)
+        await withTaskGroup(of: Void.self) { group in
+            for entry in toPost {
+                group.addTask { [api] in
+                    try? await api.markInboxRead(id: entry.id, source: entry.source)
+                }
+            }
+        }
+    }
+
+    // Count of items currently in state with isRead != true. Used by
+    // InboxView to drive the app icon badge via UNUserNotificationCenter.
+    // Computed each access — cheap given pageSize ≤ 50 in practice.
+    var unreadCount: Int {
+        guard case .loaded(let items, _) = state else { return 0 }
+        return items.lazy.filter { $0.isRead != true }.count
+    }
+
     // Optimistically drop the row from the list, then DELETE /v1/inbox/{id}.
     // On API failure we leave the row out — server filter will catch up on
     // the next refresh either way (soft delete is server-side).
