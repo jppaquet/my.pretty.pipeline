@@ -71,6 +71,30 @@ public class ApnsPayloadTests
     }
 
     [Fact]
+    public void Omits_metadata_even_when_producer_set_it()
+    {
+        // Validator allows up to 32 KB of metadata (#160) so the inbox
+        // detail view can carry a long-form digest. That can't fit in
+        // APNs' 4 KB envelope limit, and the iOS app reads metadata
+        // from the inbox API anyway — keep it out of the push payload
+        // unconditionally. Regression guard for the
+        // `BadRequestException: Notification payload is too large` we
+        // hit when ingesting Google Alerts digests.
+        var fullBody = new string('x', 8 * 1024);
+        var p = ApnsPayload.From(Sample(b =>
+        {
+            b.Metadata = new Dictionary<string, JsonElement>
+            {
+                ["fullBody"] = JsonDocument.Parse($"\"{fullBody}\"").RootElement,
+            };
+        }));
+
+        using var doc = JsonDocument.Parse(p.Json);
+        Assert.False(doc.RootElement.TryGetProperty("metadata", out _));
+        Assert.InRange(p.Json.Length, 0, 4 * 1024);
+    }
+
+    [Fact]
     public void Includes_deeplink_when_set()
     {
         var p = ApnsPayload.From(Sample(b => b.Deeplink = "notify://inbox/abc-123"));
@@ -95,6 +119,7 @@ public class ApnsPayloadTests
         public Priority Priority { get; set; } = Priority.Normal;
         public string? Deeplink { get; set; }
         public string Id { get; set; } = "id-1";
+        public IReadOnlyDictionary<string, JsonElement>? Metadata { get; set; }
 
         public NotifyCreatedV1 Build() => new()
         {
@@ -105,6 +130,7 @@ public class ApnsPayloadTests
             Priority = Priority,
             Deeplink = Deeplink,
             Id = Id,
+            Metadata = Metadata,
         };
     }
 }
