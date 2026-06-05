@@ -1,16 +1,13 @@
 name: cd-cloudflare
 
-# Applies the Terraform layer under infra/cloudflare/. Manages DNS records
-# (CNAME + asuid TXT for the Function App custom domain, MX + SPF for
-# Email Routing) and the routing rule that binds alerts@<domain> to the
-# email-ingest Worker.
+# Applies the Terraform layer under infra/cloudflare/. Manages the DNS
+# records for the Function App custom domain (CNAME `func.<domain>` +
+# the asuid TXT ownership challenge).
 #
-# Depends on cd-worker.yml having run at least once before — the Email
-# Routing rule references the Worker by name and CF rejects the rule
-# create if the Worker doesn't exist. We don't model that here as a
-# strict `needs:` because the two paths trigger from different file
-# globs; on first bootstrap the maintainer should run cd-worker first
-# via workflow_dispatch (documented in docs/FORK-SETUP.md §9).
+# Email Routing (alerts@<domain> → email-ingest Worker) moved to
+# my.pretty.blender along with the Worker itself; this stack no longer
+# touches it. The MX + SPF records stay CF-managed (auto-created when
+# Email Routing is enabled), exactly as before.
 
 on:
   push:
@@ -102,14 +99,7 @@ jobs:
         working-directory: infra/cloudflare
         env:
           TF_VAR_domain:                                       ${{ vars.NOTIFY_DOMAIN }}
-          TF_VAR_cloudflare_account_id:                        ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           TF_VAR_cloudflare_api_token:                         ${{ secrets.CLOUDFLARE_API_TOKEN }}
           TF_VAR_function_app_hostname:                        ${{ steps.azure_outputs.outputs.function_hostname }}
           TF_VAR_function_app_custom_domain_verification_id:   ${{ steps.azure_outputs.outputs.function_asuid }}
-          TF_VAR_email_destination_address:                    ${{ vars.NOTIFY_EMAIL_DESTINATION }}
-          # Local-part of the email-ingest address. Defaults to 'alerts'
-          # when the repo variable is unset, so most forks don't need to
-          # touch it; override (`gh variable set NOTIFY_EMAIL_LOCAL_PART`)
-          # to use e.g. inbox@<domain> or notify@<domain> instead.
-          TF_VAR_email_ingest_local_part:                      ${{ vars.NOTIFY_EMAIL_LOCAL_PART || 'alerts' }}
         run: terraform apply -auto-approve -input=false
