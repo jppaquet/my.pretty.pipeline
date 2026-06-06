@@ -34,7 +34,7 @@
     <PackageReference Include="Microsoft.ApplicationInsights.WorkerService" Version="3.1.2" />
     <!-- Pin transitive: 3.1.0 pulls OpenTelemetry.Api 1.15.1 (GHSA-g94r-2vxg-569j moderate). -->
     <PackageReference Include="OpenTelemetry.Api" Version="1.15.3" />
-    <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.60.0" />
+    <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.61.0" />
     <PackageReference Include="Azure.Messaging.EventGrid" Version="5.0.0" />
     <PackageReference Include="Azure.Identity" Version="1.21.0" />
     <PackageReference Include="Microsoft.Azure.NotificationHubs" Version="4.2.0" />

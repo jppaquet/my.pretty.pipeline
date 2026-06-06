@@ -9,7 +9,7 @@
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="10.0.0" />
-    <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.60.0" />
+    <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.61.0" />
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.8" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.5.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
