@@ -4,12 +4,24 @@ Manages the DNS records for the Function App's custom domain: the
 `func.<domain>` CNAME and the `asuid.func.<domain>` TXT ownership
 challenge Azure requires before binding the hostname.
 
-> **Email Routing moved out.** The `alerts@<domain> → email-ingest`
-> rule, the verified destination address, and the catch-all reject now
-> live in **my.pretty.blender** (`infra/cloudflare/`), next to the
-> `email-ingest` Worker they route to. This stack no longer touches Email
-> Routing. The MX/SPF records stay CF-managed (auto-created when Email
-> Routing is enabled in the dashboard), as before.
+## ⚠️ Shared zone — boundary with my.pretty.blender
+
+The `prettynotifier.com` Cloudflare zone is managed by **two independent
+Terraform stacks in two repos**, each owning a **disjoint** set of records.
+This is safe — Terraform only manages the resources it declares, and the
+`data.cloudflare_zone` lookup is read-only — **as long as the two stacks
+never declare the same record**.
+
+| Owner | Manages |
+|---|---|
+| **this repo (pipeline)** | `func`, `asuid.func` (this Function App's custom domain) |
+| **my.pretty.blender** | `admin`, `api`, `asuid.api` + Email Routing (`alerts@` → worker) — see that repo's `infra/cloudflare/` |
+
+**Do not** add an `admin/api/email-routing` record here, and do not add a
+`func.*` record in blender. Each repo carries its own duplicated
+`CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` secrets so it deploys
+standalone. The MX/SPF records stay CF-managed (auto-created when Email
+Routing is enabled in the dashboard).
 
 ## Running locally
 

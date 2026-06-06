@@ -5,7 +5,7 @@
 	<key>CFBundleIconName</key>
 	<string>AppIcon</string>
 	<key>NotifyAPIBaseURL</key>
-	<string>https://func-notify-dev-nrajdy.azurewebsites.net</string>
+	<string>https://func.prettynotifier.com</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
