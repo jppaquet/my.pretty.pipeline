@@ -62,16 +62,11 @@ my.pretty.pipeline.code-workspace
 !*.tfvars.example
 crash.log
 
-# ── Cloudflare Workers ───────────────────────────────────────────
-# wrangler stashes deploy state + local dev caches under `.wrangler/`.
-workers/**/.wrangler/
-workers/**/dist/
-workers/**/node_modules/
-
-# Guard against `npm install` / `wrangler login` accidentally run from
-# the repo root (instead of `workers/email-ingest/`). The repo itself
-# isn't an npm project; root-level node_modules / package.json / lock
-# is always wrong here and pulls in ~200 MB of garbage if not caught.
+# Guard against `npm install` accidentally run at the repo root. This
+# isn't an npm project (the email-ingest Worker that used to live under
+# workers/ moved to my.pretty.blender); root-level node_modules /
+# package.json / lock is always wrong here and pulls in ~200 MB of
+# garbage if not caught.
 /node_modules/
 /package.json
 /package-lock.json

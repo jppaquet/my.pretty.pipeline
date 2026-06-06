@@ -465,6 +465,17 @@ and curl recipes for each mode.
 
 ## 11. Email ingestion (optional — Google Alerts / forwarding)
 
+> **Moved.** The email-ingest transport (the Cloudflare Worker **and**
+> the Email Routing rule that binds `alerts@<domain>` to it) now lives in
+> **my.pretty.blender** — see that repo's `workers/email-ingest/` and
+> `infra/cloudflare/`. It still POSTs `notify.created.v1` CloudEvents to
+> this pipeline's `/v1/notifications` like any other producer, so the
+> pipeline-side concern is unchanged: just register a producer project +
+> mint an `npk_*` key (§9 / 11c below). The CF-token / Worker / routing
+> steps (11a–11b) are kept here for historical context but are applied
+> from blender now; this repo's `infra/cloudflare/` only manages the
+> `func.<domain>` DNS records.
+
 Lets producers that can only emit email (e.g. Google Alerts, Gmail
 filter-forwards) land messages in the pipeline. The transport is a
 Cloudflare Worker — inbound emails to `alerts@<your-domain>` are
@@ -576,11 +587,11 @@ After bootstrap, each workflow runs independently on its own paths.
 infra/                      → IaC (bicep + terraform)
   main.bicep                → cd-deploy entry point
   modules/github-oidc.bicep → bootstrap-only (step 3)
-  cloudflare/               → Terraform — DNS + Email Routing (step 11)
+  cloudflare/               → Terraform — func.<domain> DNS records only
+                              (Email Routing moved to my.pretty.blender)
 src/                        → backend (.NET 10 Azure Functions)
 app/                        → iOS app (Xcode project, source of truth)
-workers/email-ingest/       → Cloudflare Worker — inbound email adapter (step 11)
-.github/workflows/          → CI + cd-deploy + cd-cloudflare + cd-worker
+.github/workflows/          → CI + cd-deploy + cd-cloudflare
 docs/
   FORK-SETUP.md             → this doc
   DEPLOY.md                 → day-2 ops

@@ -16,5 +16,4 @@ data "cloudflare_zone" "primary" {
 locals {
   zone_id           = data.cloudflare_zone.primary.zone_id
   function_app_fqdn = "${var.function_app_custom_hostname}.${var.domain}"
-  email_ingest_addr = "${var.email_ingest_local_part}@${var.domain}"
 }

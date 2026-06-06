@@ -3,8 +3,12 @@
 # This file declares variable *shapes*, never values. Every input flows
 # in at runtime through `TF_VAR_<name>` env vars set by cd-cloudflare.yml:
 #   - Bicep outputs       → function_app_hostname, function_app_custom_domain_verification_id
-#   - GitHub repo vars    → domain, email_destination_address
-#   - GitHub repo secrets → cloudflare_account_id, cloudflare_api_token
+#   - GitHub repo vars    → domain
+#   - GitHub repo secrets → cloudflare_api_token
+#
+# Email Routing (alerts@<domain> → email-ingest Worker) moved to
+# my.pretty.blender; this stack now only manages the func.<domain> DNS
+# records. The email-routing variables that used to live here went with it.
 #
 # Repo is public — do NOT add `default = "<real-value>"` to anything here,
 # and do NOT commit a `terraform.tfvars` with real values (it's gitignored,
@@ -15,12 +19,6 @@
 variable "domain" {
   description = "Apex domain hosted on Cloudflare (e.g. prettynotifier.com)."
   type        = string
-}
-
-variable "cloudflare_account_id" {
-  description = "Cloudflare Account ID — used for account-scoped resources (Workers, Email Routing destination addresses)."
-  type        = string
-  sensitive   = true
 }
 
 variable "cloudflare_api_token" {
@@ -44,21 +42,4 @@ variable "function_app_custom_hostname" {
   description = "Subdomain on the apex that proxies to the Function App (e.g. func)."
   type        = string
   default     = "func"
-}
-
-variable "email_ingest_local_part" {
-  description = "Local-part of the email address Google Alerts delivers to (e.g. `alerts` → alerts@<domain>)."
-  type        = string
-  default     = "alerts"
-}
-
-variable "email_destination_address" {
-  description = "Verified Cloudflare destination address — Google Alerts verification emails get forwarded here so the maintainer can click the confirm link."
-  type        = string
-}
-
-variable "email_ingest_worker_name" {
-  description = "Name of the Cloudflare Worker (wrangler-deployed) that handles inbound email. Must match `name` in workers/email-ingest/wrangler.toml."
-  type        = string
-  default     = "email-ingest"
 }
