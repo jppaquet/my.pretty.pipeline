@@ -168,6 +168,15 @@ private struct InboxRow: View {
                 Text(notification.source)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if let category = notification.category, !category.isEmpty {
+                    Text(category)
+                        .font(.caption2.weight(.medium))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1)
+                        .background(Capsule().fill(Color.secondary.opacity(0.15)))
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel("Category \(category)")
+                }
                 Spacer()
                 Text(notification.timestamp.formatted(date: .abbreviated, time: .shortened))
                     .font(.caption2)
@@ -336,6 +345,13 @@ private func groupedSections(items: [InboxNotification], by grouping: InboxViewM
             return lhs < rhs
         }.compactMap { type in
             grouped[type].map { SectionData(header: type.capitalized, items: $0) }
+        }
+    case .category:
+        // Group by the producer-supplied category (email / news / …); items
+        // without one fall into "Uncategorized".
+        let grouped = Dictionary(grouping: items) { $0.category ?? "Uncategorized" }
+        return grouped.keys.sorted().compactMap { category in
+            grouped[category].map { SectionData(header: category.capitalized, items: $0) }
         }
     }
 }
