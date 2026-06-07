@@ -17,6 +17,7 @@ final class InboxViewModel {
         case project = "By Project"
         case priority = "By Priority"
         case type = "By Type"
+        case category = "By Category"
     }
 
     var grouping: Grouping = .none

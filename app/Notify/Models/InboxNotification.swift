@@ -33,26 +33,34 @@ struct InboxNotification: Identifiable, Codable, Hashable {
     // `metadata.fullBody`; everything else falls back to the regular `body`
     // (which still drives the push banner + inbox row preview).
     var renderedBody: String { metadata?.fullBody ?? body }
+
+    // Producer-supplied grouping label (e.g. "email", "news"). Surfaced as a
+    // badge in the inbox row + used for filtering. Nil for producers that
+    // don't set one.
+    var category: String? { metadata?.category }
 }
 
 // Lean projection of the server-side `metadata` object — only the keys the
 // iOS app understands. Unknown keys are dropped silently; a typed value
-// mismatch on `fullBody` (e.g. a producer sends a number) also degrades to
+// mismatch (e.g. a producer sends a number for `fullBody`) also degrades to
 // nil instead of failing the whole inbox decode.
 struct InboxMetadata: Codable, Hashable {
     let fullBody: String?
+    let category: String?
 
-    init(fullBody: String? = nil) {
+    init(fullBody: String? = nil, category: String? = nil) {
         self.fullBody = fullBody
+        self.category = category
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.fullBody = try? container.decodeIfPresent(String.self, forKey: .fullBody)
+        self.category = try? container.decodeIfPresent(String.self, forKey: .category)
     }
 
     private enum CodingKeys: String, CodingKey {
-        case fullBody
+        case fullBody, category
     }
 }
 
