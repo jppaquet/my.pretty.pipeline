@@ -39,12 +39,12 @@
     <PackageReference Include="Azure.Identity" Version="1.21.0" />
     <PackageReference Include="Microsoft.Azure.NotificationHubs" Version="4.2.0" />
     <!-- Pin transitive: NH SDK 4.2.0 pulls Microsoft.Extensions.Caching.Memory 6.0.1 (GHSA-qj66-m88j-hmgj high). -->
-    <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.8" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.9" />
     <!-- Sign-in-with-Apple JWT validation. Microsoft.IdentityModel.Tokens comes
          in transitively but pin it explicitly for clarity. -->
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.19.1" />
     <PackageReference Include="Microsoft.IdentityModel.Tokens" Version="8.19.1" />
-    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.8" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.9" />
   </ItemGroup>
 
   <ItemGroup>
